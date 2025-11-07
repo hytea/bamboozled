@@ -1,0 +1,17 @@
+[
+  {
+    "key": "puzzle-1",
+    "answer": "head over heels",
+    "imagePath": "puzzle-1.png"
+  },
+  {
+    "key": "puzzle-2",
+    "answer": "reading between the lines",
+    "imagePath": "puzzle-2.png"
+  },
+  {
+    "key": "puzzle-3",
+    "answer": "split second timing",
+    "imagePath": "puzzle-3.png"
+  }
+]
