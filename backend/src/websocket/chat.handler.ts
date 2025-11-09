@@ -22,7 +22,7 @@ interface ChatMessage {
 interface IncomingMessage {
   type: 'message' | 'command' | 'init';
   content: string;
-  userId: string;
+  userId?: string;
   userName?: string;
 }
 
@@ -61,6 +61,7 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
               type: 'bot',
               content: `Welcome, ${user.display_name}! Type your guess or use commands like /puzzle, /stats, /leaderboard, /botmood, /help`,
               timestamp: new Date().toISOString(),
+              userId: user.user_id,
               metadata: { moodTier: user.mood_tier }
             } as ChatMessage);
 
@@ -70,6 +71,21 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
             if (socket.readyState === 1) { // 1 = OPEN
               socket.send(response);
               fastify.log.info('Welcome message sent successfully, socket state after send:', socket.readyState);
+
+              // Automatically send the current puzzle
+              const puzzle = await puzzleService.getActivePuzzle();
+              if (puzzle) {
+                socket.send(JSON.stringify({
+                  type: 'bot',
+                  content: `Here's the current puzzle:`,
+                  timestamp: new Date().toISOString(),
+                  metadata: {
+                    imageUrl: `/api/puzzle/${puzzle.puzzle_id}/image`,
+                    isCommand: true
+                  }
+                } as ChatMessage));
+                fastify.log.info('Puzzle sent automatically after init');
+              }
             } else {
               fastify.log.error('Socket not in OPEN state, cannot send. State:', socket.readyState);
             }
@@ -82,6 +98,14 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
         }
 
         if (message.type === 'command' || message.content.startsWith('/')) {
+          if (!message.userId) {
+            socket.send(JSON.stringify({
+              type: 'bot',
+              content: 'Error: User ID not found. Please refresh the page.',
+              timestamp: new Date().toISOString()
+            } as ChatMessage));
+            return;
+          }
           await handleCommand(socket, message, {
             userService,
             puzzleService,
@@ -90,6 +114,14 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
             guessService
           });
         } else if (message.type === 'message') {
+          if (!message.userId) {
+            socket.send(JSON.stringify({
+              type: 'bot',
+              content: 'Error: User ID not found. Please refresh the page.',
+              timestamp: new Date().toISOString()
+            } as ChatMessage));
+            return;
+          }
           await handleGuess(socket, message, { guessService, statsService });
         }
 
@@ -161,7 +193,7 @@ async function handleCommand(
       }
     } as ChatMessage));
   } else if (command === '/stats') {
-    const stats = await services.statsService.getUserStats(message.userId);
+    const stats = await services.statsService.getUserStats(message.userId!);
     if (!stats) {
       socket.send(JSON.stringify({
         type: 'bot',
@@ -235,7 +267,7 @@ async function handleCommand(
       metadata: { isCommand: true }
     } as ChatMessage));
   } else if (command === '/botmood') {
-    const progress = await services.moodService.getProgressToNextTier(message.userId);
+    const progress = await services.moodService.getProgressToNextTier(message.userId!);
 
     const content = `🎭 Bot Mood Status:
 Current Tier: ${progress.currentTier.tier} - ${progress.currentTier.name}
@@ -287,7 +319,7 @@ async function handleGuess(
   message: IncomingMessage,
   services: { guessService: GuessService; statsService: StatsService }
 ) {
-  const result = await services.guessService.submitGuess(message.userId, message.content);
+  const result = await services.guessService.submitGuess(message.userId!, message.content);
 
   // Send bot response
   socket.send(JSON.stringify({

@@ -51,7 +51,8 @@ export class OpenRouterProvider extends BaseAIProvider {
       return {
         is_correct: parsed.is_correct,
         confidence: parsed.confidence,
-        reasoning: parsed.reasoning
+        reasoning: parsed.reasoning,
+        corrected_answer: parsed.corrected_answer
       };
     } catch (error) {
       console.error('OpenRouter validation error:', error);
@@ -66,17 +67,24 @@ export class OpenRouterProvider extends BaseAIProvider {
 
   async generateResponse(request: AIResponseRequest): Promise<AIResponseResult> {
     try {
-      const systemPrompt = this.getMoodTierPrompt(request.moodTier, request.isCorrect);
-      const context = `
+      const systemPrompt = this.getMoodTierPrompt(request.moodTier, request.isCorrect, !!request.correctedAnswer);
+
+      let context = `
 Current context:
 - User: ${request.userName || 'Player'}
 - Streak: ${request.streak} weeks
 - Total solves: ${request.totalSolves}
 - Guess number: ${request.guessNumber}
 - First place finishes: ${request.firstPlaceCount || 0}
-- Answer was: ${request.isCorrect ? 'CORRECT' : 'INCORRECT'}
+- Answer was: ${request.isCorrect ? 'CORRECT' : 'INCORRECT'}`;
 
-Generate an appropriate response matching your personality tier. Make it unique and natural.`;
+      if (request.correctedAnswer) {
+        context += `
+- User had a minor typo. Corrected answer: "${request.correctedAnswer}"
+- Acknowledge the typo but confirm they got it right`;
+      }
+
+      context += '\n\nGenerate an appropriate response matching your personality tier. Make it unique and natural.';
 
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -112,4 +120,44 @@ Generate an appropriate response matching your personality tier. Make it unique 
       };
     }
   }
+
+  async determineIntent(message: string, availableCommands: string[]): Promise<string> {
+    const systemPrompt = this.getDetermineIntentPrompt();
+
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`,
+          'HTTP-Referer': 'https://github.com/bamboozled-puzzle',
+          'X-Title': 'Bamboozled Puzzle Game'
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: message }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenRouter API error: ${response.statusText}`);
+      }
+
+      const data = await response.json() as any;
+      const intent = data.choices[0]?.message?.content.trim();
+
+      if (availableCommands.includes(intent) || intent === 'guess' || intent === 'none') {
+        return intent;
+      }
+
+      return 'guess';
+    } catch (error) {
+      console.error('OpenRouter intent determination error:', error);
+      return 'guess';
+    }
+  }
 }
+

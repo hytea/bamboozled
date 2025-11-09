@@ -44,7 +44,8 @@ Respond with JSON only.`
       return {
         is_correct: response.is_correct,
         confidence: response.confidence,
-        reasoning: response.reasoning
+        reasoning: response.reasoning,
+        corrected_answer: response.corrected_answer
       };
     } catch (error) {
       console.error('Claude validation error:', error);
@@ -60,17 +61,24 @@ Respond with JSON only.`
 
   async generateResponse(request: AIResponseRequest): Promise<AIResponseResult> {
     try {
-      const systemPrompt = this.getMoodTierPrompt(request.moodTier, request.isCorrect);
-      const context = `
+      const systemPrompt = this.getMoodTierPrompt(request.moodTier, request.isCorrect, !!request.correctedAnswer);
+
+      let context = `
 Current context:
 - User: ${request.userName || 'Player'}
 - Streak: ${request.streak} weeks
 - Total solves: ${request.totalSolves}
 - Guess number: ${request.guessNumber}
 - First place finishes: ${request.firstPlaceCount || 0}
-- Answer was: ${request.isCorrect ? 'CORRECT' : 'INCORRECT'}
+- Answer was: ${request.isCorrect ? 'CORRECT' : 'INCORRECT'}`;
 
-Generate an appropriate response matching your personality tier. Make it unique and natural.`;
+      if (request.correctedAnswer) {
+        context += `
+- User had a minor typo. Corrected answer: "${request.correctedAnswer}"
+- Acknowledge the typo but confirm they got it right`;
+      }
+
+      context += '\n\nGenerate an appropriate response matching your personality tier. Make it unique and natural.';
 
       const message = await this.client.messages.create({
         model: 'claude-sonnet-4-5-20250929',
@@ -95,6 +103,37 @@ Generate an appropriate response matching your personality tier. Make it unique 
           ? 'Correct!'
           : 'Not quite. Try again!'
       };
+    }
+  }
+
+  async determineIntent(message: string, availableCommands: string[]): Promise<string> {
+    const systemPrompt = this.getDetermineIntentPrompt();
+
+    try {
+      const response = await this.client.messages.create({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 32,
+        messages: [{
+          role: 'user',
+          content: message
+        }],
+        system: systemPrompt
+      });
+
+      const content = response.content[0];
+      if (content.type !== 'text') {
+        throw new Error('Unexpected response type from Claude');
+      }
+
+      const intent = content.text.trim();
+      if (availableCommands.includes(intent) || intent === 'guess' || intent === 'none') {
+        return intent;
+      }
+
+      return 'guess';
+    } catch (error) {
+      console.error('Claude intent determination error:', error);
+      return 'guess';
     }
   }
 }

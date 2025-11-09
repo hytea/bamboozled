@@ -22,6 +22,7 @@ build/
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
@@ -33,7 +34,13 @@ Thumbs.db
 # Testing
 coverage/
 .nyc_output/
+playwright-report/
+test-results/
 
 # Temp
 tmp/
 temp/
+.gemini-clipboard/
+
+# Issue tracking
+.beads/daemon.pid

@@ -1,31 +1,60 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { ChatWindow } from './components/ChatWindow';
-import { UserSelector } from './components/UserSelector';
 
 function App() {
   const [userName, setUserName] = useLocalStorage<string>('bamboozled-username', '');
-  const [userId, setUserId] = useLocalStorage<string>('bamboozled-userid', '');
-  const [isUserSet, setIsUserSet] = useState(!!userName && !!userId);
+
+  // Use plain localStorage for userId (not JSON-encoded) for test compatibility
+  const [userId, setUserId] = useState<string>(() => {
+    const stored = localStorage.getItem('userId');
+    if (stored && stored !== 'temp') {
+      return stored;
+    }
+    const newUserId = crypto.randomUUID();
+    localStorage.setItem('userId', newUserId);
+    return newUserId;
+  });
+
+  // Re-check localStorage periodically in case it was cleared
+  useEffect(() => {
+    const checkUserId = () => {
+      const stored = localStorage.getItem('userId');
+      if (!stored || stored === 'temp') {
+        const newUserId = crypto.randomUUID();
+        setUserId(newUserId);
+        localStorage.setItem('userId', newUserId);
+      } else if (stored !== userId) {
+        setUserId(stored);
+      }
+    };
+
+    // Check every 100ms to catch localStorage clears quickly
+    const interval = setInterval(checkUserId, 100);
+    return () => clearInterval(interval);
+  }, [userId]);
+
+  // Set default username if none exists
+  useEffect(() => {
+    if (!userName) {
+      setUserName('Guest');
+    }
+  }, [userName, setUserName]);
 
   const wsUrl = `ws://${window.location.hostname}:3001/ws`;
 
   const { messages, sendMessage, isConnected } = useWebSocket(
     wsUrl,
     userId || 'temp',
-    userName || 'Guest'
+    userName || 'Guest',
+    (newUserId) => {
+      if (newUserId !== userId) {
+        setUserId(newUserId);
+        localStorage.setItem('userId', newUserId);
+      }
+    }
   );
-
-  const handleUserSelect = (name: string, id: string) => {
-    setUserName(name);
-    setUserId(id);
-    setIsUserSet(true);
-  };
-
-  if (!isUserSet) {
-    return <UserSelector onUserSelect={handleUserSelect} />;
-  }
 
   return (
     <div className="h-screen w-screen bg-background">

@@ -107,7 +107,8 @@ Respond with JSON only.`;
       return {
         is_correct: parsed.is_correct || false,
         confidence: parsed.confidence || 0.5,
-        reasoning: parsed.reasoning || 'Response parsed from local model'
+        reasoning: parsed.reasoning || 'Response parsed from local model',
+        corrected_answer: parsed.corrected_answer
       };
     } catch (error) {
       console.error('Ollama validation error:', error);
@@ -123,17 +124,24 @@ Respond with JSON only.`;
 
   async generateResponse(request: AIResponseRequest): Promise<AIResponseResult> {
     try {
-      const systemPrompt = this.getMoodTierPrompt(request.moodTier, request.isCorrect);
-      const context = `
+      const systemPrompt = this.getMoodTierPrompt(request.moodTier, request.isCorrect, !!request.correctedAnswer);
+
+      let context = `
 Current context:
 - User: ${request.userName || 'Player'}
 - Streak: ${request.streak} weeks
 - Total solves: ${request.totalSolves}
 - Guess number: ${request.guessNumber}
 - First place finishes: ${request.firstPlaceCount || 0}
-- Answer was: ${request.isCorrect ? 'CORRECT' : 'INCORRECT'}
+- Answer was: ${request.isCorrect ? 'CORRECT' : 'INCORRECT'}`;
 
-Generate an appropriate response matching your personality tier. Make it unique and natural.`;
+      if (request.correctedAnswer) {
+        context += `
+- User had a minor typo. Corrected answer: "${request.correctedAnswer}"
+- Acknowledge the typo but confirm they got it right`;
+      }
+
+      context += '\n\nGenerate an appropriate response matching your personality tier. Make it unique and natural.';
 
       const response = await fetch(`${this.baseUrl}/api/chat`, {
         method: 'POST',
@@ -214,4 +222,40 @@ Generate an appropriate response matching your personality tier. Make it unique 
       return [];
     }
   }
+
+  async determineIntent(message: string, availableCommands: string[]): Promise<string> {
+    const systemPrompt = this.getDetermineIntentPrompt();
+
+    try {
+      const response = await fetch(`${this.baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: message }
+          ],
+          stream: false
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ollama API error: ${response.statusText}`);
+      }
+
+      const data = await response.json() as OllamaResponse;
+      const intent = data.message.content.trim();
+
+      if (availableCommands.includes(intent) || intent === 'guess' || intent === 'none') {
+        return intent;
+      }
+
+      return 'guess';
+    } catch (error) {
+      console.error('Ollama intent determination error:', error);
+      return 'guess';
+    }
+  }
 }
+

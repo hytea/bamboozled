@@ -4,11 +4,16 @@
   "description": "",
   "main": "scrape-bamboozled-puzzles.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "puppeteer": "^22.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1"
   }
 }

@@ -4,10 +4,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getConfig } from '../config/env.js';
 
-interface PuzzleData {
-  key: string;
-  answer: string;
-  imagePath: string;
+interface PuzzlePageData {
+  pageNumber: number;
+  pageUrl: string;
+  answerUrl: string;
+  puzzleImageName: string[];
+  answers: string[];
 }
 
 export class PuzzleService {
@@ -51,26 +53,41 @@ export class PuzzleService {
     }
 
     const fileContent = fs.readFileSync(puzzleDataPath, 'utf-8');
-    const puzzlesData: PuzzleData[] = JSON.parse(fileContent);
+    const pagesData: PuzzlePageData[] = JSON.parse(fileContent);
 
-    for (const puzzleData of puzzlesData) {
-      // Check if puzzle already exists
-      const existing = await this.puzzleRepository.findByKey(puzzleData.key);
+    let totalPuzzles = 0;
 
-      if (!existing) {
-        // Create new puzzle (inactive by default)
-        await this.puzzleRepository.create({
-          puzzle_key: puzzleData.key,
-          answer: puzzleData.answer,
-          image_path: puzzleData.imagePath,
-          week_start_date: new Date().toISOString(),
-          week_end_date: new Date().toISOString(),
-          is_active: 0
-        });
+    for (const page of pagesData) {
+      // Each page has multiple puzzles (typically 6)
+      for (let i = 0; i < page.puzzleImageName.length; i++) {
+        const imageName = page.puzzleImageName[i];
+        const answerText = page.answers[i];
+
+        // Extract answer without the number prefix (e.g., "1. Falling Temperature" -> "Falling Temperature")
+        const answer = answerText.replace(/^\d+\.\s*/, '').trim();
+
+        // Create puzzle key from image name without extension (e.g., "puzzle1-1.png" -> "puzzle1-1")
+        const puzzleKey = imageName.replace(/\.png$/, '');
+
+        // Check if puzzle already exists
+        const existing = await this.puzzleRepository.findByKey(puzzleKey);
+
+        if (!existing) {
+          // Create new puzzle (inactive by default)
+          await this.puzzleRepository.create({
+            puzzle_key: puzzleKey,
+            answer: answer,
+            image_path: imageName,
+            week_start_date: new Date().toISOString(),
+            week_end_date: new Date().toISOString(),
+            is_active: 0
+          });
+          totalPuzzles++;
+        }
       }
     }
 
-    console.log(`✅ Loaded ${puzzlesData.length} puzzles from ${puzzleDataPath}`);
+    console.log(`✅ Loaded ${totalPuzzles} puzzles from ${pagesData.length} pages in ${puzzleDataPath}`);
   }
 
   /**

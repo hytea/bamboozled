@@ -1,15 +1,13 @@
-import { getDatabase, generateId } from '../connection.js';
+import { getDatabase } from '../connection.js';
 import type { User, NewUser, UserUpdate } from '../schema.js';
 
 export class UserRepository {
-  async create(userData: Omit<NewUser, 'user_id' | 'created_at' | 'updated_at'>): Promise<User> {
+  async create(userData: NewUser): Promise<User> {
     const db = getDatabase();
-    const userId = generateId();
 
     const user = await db
       .insertInto('users')
       .values({
-        user_id: userId,
         ...userData,
         mood_tier: 0,
         created_at: new Date().toISOString(),
@@ -27,15 +25,6 @@ export class UserRepository {
       .selectFrom('users')
       .selectAll()
       .where('user_id', '=', userId)
-      .executeTakeFirst();
-  }
-
-  async findBySlackUserId(slackUserId: string): Promise<User | undefined> {
-    const db = getDatabase();
-    return db
-      .selectFrom('users')
-      .selectAll()
-      .where('slack_user_id', '=', slackUserId)
       .executeTakeFirst();
   }
 

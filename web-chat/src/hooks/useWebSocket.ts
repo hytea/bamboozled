@@ -4,6 +4,7 @@ export interface ChatMessage {
   type: 'user' | 'bot';
   content: string;
   timestamp: string;
+  userId?: string;
   metadata?: {
     imageUrl?: string;
     gifUrl?: string;
@@ -12,10 +13,25 @@ export interface ChatMessage {
   };
 }
 
-export function useWebSocket(url: string, userId: string, userName: string) {
+export function useWebSocket(url: string, userId: string, userName: string, onUserIdReceived?: (userId: string) => void) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const onUserIdReceivedRef = useRef(onUserIdReceived);
+  const userIdRef = useRef(userId);
+  const userNameRef = useRef(userName);
+
+  useEffect(() => {
+    onUserIdReceivedRef.current = onUserIdReceived;
+  }, [onUserIdReceived]);
+
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
+
+  useEffect(() => {
+    userNameRef.current = userName;
+  }, [userName]);
 
   const connect = useCallback(() => {
     // Don't create a new connection if one already exists and is open
@@ -29,12 +45,11 @@ export function useWebSocket(url: string, userId: string, userName: string) {
       console.log('WebSocket connected');
       setIsConnected(true);
 
-      // Send init message
+      // Send init message (server will create/find user by userName and send back userId)
       ws.send(
         JSON.stringify({
           type: 'init',
-          userId,
-          userName
+          userName: userNameRef.current
         })
       );
     };
@@ -42,6 +57,17 @@ export function useWebSocket(url: string, userId: string, userName: string) {
     ws.onmessage = (event) => {
       const message: ChatMessage = JSON.parse(event.data);
       setMessages((prev) => [...prev, message]);
+
+      // If server sends back a userId, update it immediately and notify parent
+      if (message.userId) {
+        // Update the ref immediately so subsequent messages use the correct userId
+        userIdRef.current = message.userId;
+
+        // Also notify the parent component to update its state
+        if (onUserIdReceivedRef.current) {
+          onUserIdReceivedRef.current(message.userId);
+        }
+      }
     };
 
     ws.onclose = (event) => {
@@ -63,14 +89,14 @@ export function useWebSocket(url: string, userId: string, userName: string) {
     };
 
     wsRef.current = ws;
-  }, [url, userId, userName]);
+  }, [url]);
 
   useEffect(() => {
     connect();
 
     return () => {
       if (wsRef.current) {
-        wsRef.current.close();
+        wsRef.current.close(1000);
         wsRef.current = null;
       }
     };
@@ -96,12 +122,12 @@ export function useWebSocket(url: string, userId: string, userName: string) {
           JSON.stringify({
             type: content.startsWith('/') ? 'command' : type,
             content,
-            userId
+            userId: userIdRef.current
           })
         );
       }
     },
-    [userId]
+    []
   );
 
   return {

@@ -71,6 +71,7 @@ export interface AIValidationResponse {
   is_correct: boolean;
   confidence: number;
   reasoning: string;
+  corrected_answer?: string; // Present if answer had minor typos
 }
 
 export interface AIResponseRequest {
@@ -81,6 +82,7 @@ export interface AIResponseRequest {
   guessNumber: number;
   userName?: string;
   firstPlaceCount?: number;
+  correctedAnswer?: string; // Present if user had minor typos
 }
 
 export interface AIResponseResult {
@@ -90,6 +92,7 @@ export interface AIResponseResult {
 export interface AIProvider {
   validateAnswer(request: AIValidationRequest): Promise<AIValidationResponse>;
   generateResponse(request: AIResponseRequest): Promise<AIResponseResult>;
+  determineIntent(message: string, availableCommands: string[]): Promise<string>;
 }
 
 // Stats types

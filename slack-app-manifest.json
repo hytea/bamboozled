@@ -1,0 +1,83 @@
+{
+  "display_information": {
+    "name": "Bamboozled Puzzle Bot",
+    "description": "A puzzle game bot with weekly challenges, AI-powered answer validation, and dynamic personality based on your performance",
+    "background_color": "#4A154B",
+    "long_description": "Bamboozled is an interactive puzzle game bot that brings weekly puzzle challenges to your Slack workspace. Features include:\n\n• Weekly rotating puzzles with visual challenges\n• AI-powered natural language answer validation\n• Personal statistics and leaderboards\n• Dynamic bot personality that evolves based on your performance\n• Celebration GIFs for correct answers\n• Streak tracking and mood tier progression\n\nUse slash commands to view puzzles, check leaderboards, and track your stats. Submit answers via direct message to the bot!"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Bamboozled",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/puzzle",
+        "description": "View the current puzzle",
+        "usage_hint": "Type /puzzle to see the current week's puzzle",
+        "should_escape": false
+      },
+      {
+        "command": "/bamboozled",
+        "description": "View the current puzzle (alias for /puzzle)",
+        "usage_hint": "Type /bamboozled to see the current week's puzzle",
+        "should_escape": false
+      },
+      {
+        "command": "/leaderboard",
+        "description": "View this week's leaderboard",
+        "usage_hint": "Type /leaderboard to see who's winning this week",
+        "should_escape": false
+      },
+      {
+        "command": "/stats",
+        "description": "View your personal puzzle statistics",
+        "usage_hint": "Type /stats to see your solve count, streak, and more",
+        "should_escape": false
+      },
+      {
+        "command": "/alltime",
+        "description": "View the all-time leaderboard",
+        "usage_hint": "Type /alltime to see the top solvers of all time",
+        "should_escape": false
+      },
+      {
+        "command": "/botmood",
+        "description": "Check the bot's current mood toward you",
+        "usage_hint": "Type /botmood to see your current tier and progress",
+        "should_escape": false
+      },
+      {
+        "command": "/help",
+        "description": "Show available commands and how to play",
+        "usage_hint": "Type /help to learn how to play Bamboozled",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "commands",
+        "files:write",
+        "im:history",
+        "im:write",
+        "users:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "bot_events": [
+        "message.im"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": false
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}

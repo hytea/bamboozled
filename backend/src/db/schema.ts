@@ -2,8 +2,7 @@ import type { ColumnType, Generated, Insertable, Selectable, Updateable } from '
 
 // Users table
 export interface UsersTable {
-  user_id: Generated<string>;
-  slack_user_id: string | null;
+  user_id: string;
   display_name: string;
   mood_tier: number;
   created_at: ColumnType<Date, string | undefined, never>;

@@ -97,7 +97,8 @@ export class GuessService {
       isCorrect: validation.is_correct,
       guessNumber,
       userName: user.display_name,
-      firstPlaceCount: firstPlaceFinishes
+      firstPlaceCount: firstPlaceFinishes,
+      correctedAnswer: validation.corrected_answer
     });
 
     let tierChanged = false;

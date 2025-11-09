@@ -64,7 +64,7 @@ try {
 // Initialize database
 async function initializeDatabase() {
   try {
-    await initDatabase();
+    await initDatabase(true);
     fastify.log.info('✅ Database initialized');
   } catch (error) {
     fastify.log.error(`❌ Failed to initialize database: ${error}`);
@@ -102,6 +102,27 @@ async function initializePuzzles() {
   }
 }
 
+// Initialize Slack bot
+async function initializeSlackBot() {
+  if (!config.ENABLE_SLACK) {
+    return;
+  }
+
+  try {
+    const { SlackService } = await import('./services/slack.service.js');
+    const slackService = new SlackService(aiProvider, fastify.log);
+    await slackService.start();
+    fastify.log.info('✅ Slack bot initialized and started');
+
+    // Store in fastify context for potential cleanup
+    fastify.decorate('slackService', slackService);
+  } catch (error) {
+    fastify.log.error(`❌ Failed to initialize Slack bot: ${error}`);
+    fastify.log.warn('⚠️  Continuing without Slack integration');
+    // Don't exit - continue without Slack
+  }
+}
+
 // Start server
 const start = async () => {
   try {
@@ -110,6 +131,9 @@ const start = async () => {
 
     // Load and activate puzzles
     await initializePuzzles();
+
+    // Initialize Slack bot if enabled
+    await initializeSlackBot();
 
     // Start listening
     await fastify.listen({
