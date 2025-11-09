@@ -84,6 +84,12 @@ export class SlackService {
       await ack();
       await this.handleBotMoodCommand(command.channel_id, undefined, command.user_id);
     });
+
+    // /nextweek - Rotate to next puzzle (testing only)
+    this.app.command('/nextweek', async ({ command, ack }) => {
+      await ack();
+      await this.handleNextWeekCommand(command.channel_id, undefined);
+    });
   }
 
   /**
@@ -390,6 +396,7 @@ export class SlackService {
     */stats* - View your personal statistics
     */alltime* - View all-time leaderboard
     */botmood* - Check the bot's mood toward you
+    */nextweek* - Rotate to next puzzle (testing)
     */help* - Show this help message
 
     💡 *To submit an answer, send me a direct message with your guess!*`;
@@ -476,6 +483,70 @@ export class SlackService {
       }
     
       /**
+       * Handle /nextweek command - Rotate to next puzzle (testing)
+       */
+      private async handleNextWeekCommand(channelId: string, threadTs: string | undefined): Promise<void> {
+        try {
+          const currentPuzzle = await this.puzzleService.getActivePuzzle();
+          const allPuzzles = await this.puzzleService.getAllPuzzles();
+          const nextPuzzle = await this.puzzleService.rotateToNextPuzzle();
+
+          if (!nextPuzzle) {
+            await this.app.client.chat.postMessage({
+              channel: channelId,
+              ...(threadTs && { thread_ts: threadTs }),
+              text: '❌ No puzzles available to rotate to.'
+            });
+            return;
+          }
+
+          let debugInfo = `Total puzzles: ${allPuzzles.length}`;
+          if (currentPuzzle) {
+            const currentIdx = allPuzzles.findIndex(p => p.puzzle_id === currentPuzzle.puzzle_id);
+            const nextIdx = allPuzzles.findIndex(p => p.puzzle_id === nextPuzzle.puzzle_id);
+            debugInfo += `\nPrevious: ${currentPuzzle.puzzle_key} (index ${currentIdx})`;
+            debugInfo += `\nNew: ${nextPuzzle.puzzle_key} (index ${nextIdx})`;
+            debugInfo += `\nAnswer: "${nextPuzzle.answer}"`;
+          } else {
+            debugInfo += `\nNo previous puzzle (activating first)`;
+            debugInfo += `\nNew: ${nextPuzzle.puzzle_key}`;
+            debugInfo += `\nAnswer: "${nextPuzzle.answer}"`;
+          }
+
+          const blocks: any[] = [
+            {
+              type: 'header',
+              text: {
+                type: 'plain_text',
+                text: '🔄 Week Reset - New Puzzle Activated!',
+                emoji: true
+              }
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: debugInfo + '\n\nThe week has been reset. Weekly leaderboard will start fresh with this puzzle!'
+              }
+            }
+          ];
+
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            blocks
+          });
+        } catch (error) {
+          this.logger.error(`Error handling nextweek command: ${error}`);
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: 'Sorry, I encountered an error rotating to the next puzzle.'
+          });
+        }
+      }
+
+      /**
        * Ensure user exists, creating if necessary
        */
       private async ensureUser(userId: string): Promise<User> {
@@ -495,15 +566,39 @@ export class SlackService {
           const user = await this.ensureUser(userId);
 
           // Determine user's intent
-          const availableCommands = [
-            '/puzzle',
-            '/leaderboard',
-            '/stats',
-            '/alltime',
-            '/help',
-            '/botmood'
-          ];
-          const intent = await this.aiProvider.determineIntent(text, availableCommands);
+          // Quick pattern matching for common phrases before asking AI
+          const lowerText = text.toLowerCase().trim();
+          let intent: string;
+
+          if (lowerText.match(/^(next\s*week|reset|rotate|new\s*puzzle)/)) {
+            intent = '/nextweek';
+          } else if (lowerText.match(/^(puzzle|show.*puzzle|what.*puzzle|view.*puzzle)/)) {
+            intent = '/puzzle';
+          } else if (lowerText.match(/^(leaderboard|leader\s*board|standings)/)) {
+            intent = '/leaderboard';
+          } else if (lowerText.match(/^(stats|statistics|my\s*stats)/)) {
+            intent = '/stats';
+          } else if (lowerText.match(/^(all\s*time|alltime|all.*time.*leaders)/)) {
+            intent = '/alltime';
+          } else if (lowerText.match(/^(help|commands)/)) {
+            intent = '/help';
+          } else if (lowerText.match(/^(bot\s*mood|mood|attitude)/)) {
+            intent = '/botmood';
+          } else if (lowerText.match(/^(hi|hello|hey|good\s*(morning|afternoon|evening))/)) {
+            intent = 'none';
+          } else {
+            // Fall back to AI for complex cases
+            const availableCommands = [
+              '/puzzle',
+              '/leaderboard',
+              '/stats',
+              '/alltime',
+              '/help',
+              '/botmood',
+              '/nextweek'
+            ];
+            intent = await this.aiProvider.determineIntent(text, availableCommands);
+          }
     
           // Execute command based on intent
           switch (intent) {
@@ -524,6 +619,9 @@ export class SlackService {
               break;
             case '/botmood':
               await this.handleBotMoodCommand(channelId, threadTs, user.user_id);
+              break;
+            case '/nextweek':
+              await this.handleNextWeekCommand(channelId, threadTs);
               break;
             case 'guess':
               // Assume it's a guess

@@ -64,7 +64,15 @@ try {
 // Initialize database
 async function initializeDatabase() {
   try {
-    await initDatabase(true);
+    // Do NOT reset database on startup (data persistence)
+    // Set to true only for development if you want to wipe data
+    const shouldReset = process.env.RESET_DB === 'true';
+
+    if (shouldReset) {
+      fastify.log.warn('⚠️  RESET_DB=true - Database will be wiped!');
+    }
+
+    await initDatabase(shouldReset);
     fastify.log.info('✅ Database initialized');
   } catch (error) {
     fastify.log.error(`❌ Failed to initialize database: ${error}`);

@@ -38,6 +38,73 @@ export class GuessService {
   }
 
   /**
+   * Pre-validate that all significant words are present
+   * Returns true if the guess has all required words (ignoring articles)
+   */
+  private hasAllSignificantWords(correctAnswer: string, userGuess: string): boolean {
+    const articles = new Set(['a', 'an', 'the']);
+
+    // Normalize and split into words
+    const answerWords = correctAnswer.toLowerCase()
+      .split(/\s+/)
+      .filter(w => w.length > 0 && !articles.has(w));
+
+    const guessWords = userGuess.toLowerCase()
+      .split(/\s+/)
+      .filter(w => w.length > 0 && !articles.has(w));
+
+    // Every significant word from answer must have a match in guess
+    // Allow for minor typos (Levenshtein distance <= 2)
+    for (const answerWord of answerWords) {
+      const hasMatch = guessWords.some(guessWord => {
+        // Exact match
+        if (answerWord === guessWord) return true;
+
+        // Allow for minor character differences
+        const distance = this.levenshteinDistance(answerWord, guessWord);
+        return distance <= 2;
+      });
+
+      if (!hasMatch) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Calculate Levenshtein distance between two strings
+   */
+  private levenshteinDistance(a: string, b: string): number {
+    const matrix: number[][] = [];
+
+    for (let i = 0; i <= b.length; i++) {
+      matrix[i] = [i];
+    }
+
+    for (let j = 0; j <= a.length; j++) {
+      matrix[0][j] = j;
+    }
+
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) === a.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1, // substitution
+            matrix[i][j - 1] + 1,     // insertion
+            matrix[i - 1][j] + 1      // deletion
+          );
+        }
+      }
+    }
+
+    return matrix[b.length][a.length];
+  }
+
+  /**
    * Submit a guess for the active puzzle
    */
   async submitGuess(userId: string, guessText: string): Promise<SubmitGuessResult> {
@@ -67,11 +134,24 @@ export class GuessService {
     const previousGuesses = await this.guessRepository.getUserGuessesForPuzzle(userId, activePuzzle.puzzle_id);
     const guessNumber = previousGuesses.length + 1;
 
-    // Validate answer with AI
-    const validation = await this.aiProvider.validateAnswer({
-      correctAnswer: activePuzzle.answer,
-      userGuess: guessText
-    });
+    // Pre-validate: Check if all significant words are present
+    const hasAllWords = this.hasAllSignificantWords(activePuzzle.answer, guessText);
+
+    let validation;
+    if (!hasAllWords) {
+      // Reject immediately if missing significant words
+      validation = {
+        is_correct: false,
+        confidence: 1.0,
+        reasoning: `Missing required words. The complete answer is "${activePuzzle.answer}".`
+      };
+    } else {
+      // All words present, validate with AI for final check (typos, etc.)
+      validation = await this.aiProvider.validateAnswer({
+        correctAnswer: activePuzzle.answer,
+        userGuess: guessText
+      });
+    }
 
     // Record guess
     const guess = await this.guessRepository.create({

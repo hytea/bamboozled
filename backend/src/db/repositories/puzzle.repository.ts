@@ -76,7 +76,11 @@ export class PuzzleRepository {
 
   async getAll(): Promise<Puzzle[]> {
     const db = getDatabase();
-    return db.selectFrom('puzzles').selectAll().execute();
+    return db
+      .selectFrom('puzzles')
+      .selectAll()
+      .orderBy('puzzle_key', 'asc')
+      .execute();
   }
 
   async getPuzzlesByWeek(weekStartDate: string): Promise<Puzzle[]> {

@@ -52,6 +52,12 @@
         "description": "Show available commands and how to play",
         "usage_hint": "Type /help to learn how to play Bamboozled",
         "should_escape": false
+      },
+      {
+        "command": "/nextweek",
+        "description": "Rotate to the next puzzle (testing only)",
+        "usage_hint": "Type /nextweek to activate the next puzzle",
+        "should_escape": false
       }
     ]
   },

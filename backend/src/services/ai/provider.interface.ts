@@ -64,14 +64,20 @@ Acceptance criteria:
 
 Rejection criteria:
 - Partial answers or single words from multi-word answers
+- Missing significant words (numbers, nouns, verbs, adjectives, adverbs)
+- If the answer is "Two Under Par" and the guess is "Under Par", REJECT (missing the number "Two")
+- If the answer is "Falling Temperature" and the guess is "Temperature", REJECT (missing "Falling")
 - Semantically related but different phrases
 - Abbreviations or shortened versions (unless the answer itself is an abbreviation)
 - Synonyms that change the meaning
 - Guesses that are only tangentially related
 - Overly generic guesses
 
+IMPORTANT: ALL significant words must be present. Only articles (a, an, the) can be omitted.
+Numbers, nouns, verbs, adjectives, and adverbs are ALL required.
+
 Be lenient with typos: If the intention is clear, accept the answer.
-Be strict with content: The user must provide substantially all the words in the correct answer.
+Be strict with content: The user must provide ALL significant words from the correct answer.
 
 When accepting an answer with typos, include the corrected version.
 
@@ -94,6 +100,7 @@ Respond with JSON:
     - /alltime: View the all-time leaderboard
     - /help: Show available commands
     - /botmood: Check the bot's current mood/attitude
+    - /nextweek: Rotate to the next puzzle (testing/admin)
 
     If the user's message seems like a command, respond with the corresponding command (e.g., "/puzzle").
     If the user's message is a guess for the puzzle, respond with "guess".
@@ -108,6 +115,10 @@ Respond with JSON:
     - User: "all time leaders" -> /alltime
     - User: "help me" -> /help
     - User: "how are you feeling?" -> /botmood
+    - User: "next week" -> /nextweek
+    - User: "reset the week" -> /nextweek
+    - User: "move to the next puzzle" -> /nextweek
+    - User: "rotate to next week" -> /nextweek
     - User: "the answer is 'superman'" -> guess
     - User: "is it 'wonder woman'?" -> guess
     - User: "i think it's 'batman'" -> guess

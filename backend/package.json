@@ -15,7 +15,12 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "debug:slack": "tsx src/debug.ts",
     "debug:slack-echo": "tsx src/slack-debug.ts",
-    "debug:simple-bot": "tsx src/simple-slack-bot.ts"
+    "debug:simple-bot": "tsx src/simple-slack-bot.ts",
+    "db:init": "tsx src/scripts/db-init.ts",
+    "db:reset": "tsx src/scripts/db-init.ts --reset",
+    "db:export": "tsx src/scripts/db-export.ts",
+    "db:import": "tsx src/scripts/db-import.ts",
+    "db:health": "tsx src/scripts/db-health.ts"
   },
   "keywords": [
     "puzzle",
