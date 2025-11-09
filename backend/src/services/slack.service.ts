@@ -598,6 +598,7 @@ export class SlackService {
               '/nextweek'
             ];
             intent = await this.aiProvider.determineIntent(text, availableCommands);
+            this.logger.info(`AI determined intent: "${intent}" for message: "${text}"`);
           }
     
           // Execute command based on intent
@@ -624,7 +625,8 @@ export class SlackService {
               await this.handleNextWeekCommand(channelId, threadTs);
               break;
             case 'guess':
-              // Assume it's a guess
+            default:
+              // Treat unknown intents as guesses (this is primarily a guessing game)
               const result = await this.guessService.submitGuess(user.user_id, text);
 
               // Send response message
@@ -676,12 +678,6 @@ export class SlackService {
                 }
               }
               break;
-            default:
-              await this.app.client.chat.postMessage({
-                channel: channelId,
-                thread_ts: threadTs,
-                text: "I'm not sure what you mean. Try asking for the /puzzle, your /stats, or the /leaderboard. Or, if you want to make a guess, just type your answer!"
-              });
           }
         } catch (error) {
           this.logger.error(`Error handling direct message: ${error}`);
