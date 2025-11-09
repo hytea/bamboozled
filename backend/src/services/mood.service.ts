@@ -86,29 +86,64 @@ export class MoodService {
 
   /**
    * Get user's current streak
+   * A streak is the number of consecutive weeks where the user solved at least one puzzle
    */
   async getUserStreak(userId: string): Promise<number> {
     const db = getDatabase();
 
-    // Get all correct guesses for this user, ordered by solve time
-    const correctGuesses = await db
+    // Get all puzzles the user has solved, with week information
+    const solvedPuzzles = await db
       .selectFrom('guesses')
-      .select(['puzzle_id', 'timestamp'])
-      .where('user_id', '=', userId)
-      .where('is_correct', '=', 1)
-      .orderBy('timestamp', 'desc')
+      .innerJoin('puzzles', 'puzzles.puzzle_id', 'guesses.puzzle_id')
+      .select(['puzzles.week_start_date', 'guesses.timestamp'])
+      .where('guesses.user_id', '=', userId)
+      .where('guesses.is_correct', '=', 1)
+      .orderBy('puzzles.week_start_date', 'desc')
       .execute();
 
-    if (correctGuesses.length === 0) {
+    if (solvedPuzzles.length === 0) {
       return 0;
     }
 
-    // Get unique puzzles solved
-    const uniquePuzzles = [...new Set(correctGuesses.map(g => g.puzzle_id))];
+    // Group by week to get unique weeks solved
+    const weeksSolved = new Set(
+      solvedPuzzles.map(p => {
+        const date = new Date(p.week_start_date);
+        return date.toISOString().split('T')[0]; // YYYY-MM-DD format
+      })
+    );
 
-    // For now, return count of unique puzzles solved
-    // TODO: Implement proper weekly streak calculation
-    return uniquePuzzles.length;
+    // Convert to sorted array (most recent first)
+    const sortedWeeks = Array.from(weeksSolved).sort().reverse();
+
+    if (sortedWeeks.length === 0) {
+      return 0;
+    }
+
+    // Calculate streak by counting consecutive weeks
+    let streak = 1; // Start with 1 for the most recent week
+    const mostRecentWeek = new Date(sortedWeeks[0]);
+
+    for (let i = 1; i < sortedWeeks.length; i++) {
+      const currentWeek = new Date(sortedWeeks[i]);
+      const expectedPreviousWeek = new Date(mostRecentWeek);
+      expectedPreviousWeek.setDate(expectedPreviousWeek.getDate() - (7 * i));
+
+      // Allow some tolerance (within 3 days) for week boundaries
+      const daysDiff = Math.abs(
+        (expectedPreviousWeek.getTime() - currentWeek.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      if (daysDiff <= 10) {
+        // Week is consecutive (within tolerance)
+        streak++;
+      } else {
+        // Gap found, break streak
+        break;
+      }
+    }
+
+    return streak;
   }
 
   /**
@@ -141,6 +176,9 @@ export class MoodService {
     const totalSolves = await this.getUserTotalSolves(userId);
     const newTier = this.calculateMoodTier(streak, totalSolves);
 
+    // Update best streak if current streak exceeds it
+    await this.updateBestStreak(userId, streak);
+
     if (newTier !== oldTier) {
       // Update user's mood tier
       const updatedUser = await this.userRepository.updateMoodTier(userId, newTier);
@@ -169,6 +207,25 @@ export class MoodService {
       oldTier,
       newTier
     };
+  }
+
+  /**
+   * Update user's best streak if current streak is higher
+   */
+  async updateBestStreak(userId: string, currentStreak: number): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new Error(`User not found: ${userId}`);
+    }
+
+    if (currentStreak > user.best_streak) {
+      const db = getDatabase();
+      await db
+        .updateTable('users')
+        .set({ best_streak: currentStreak })
+        .where('user_id', '=', userId)
+        .execute();
+    }
   }
 
   /**

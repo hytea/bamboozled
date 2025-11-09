@@ -5,6 +5,7 @@ export interface UsersTable {
   user_id: string;
   display_name: string;
   mood_tier: number;
+  best_streak: number;
   created_at: ColumnType<Date, string | undefined, never>;
   updated_at: ColumnType<Date, string | undefined, string>;
 }

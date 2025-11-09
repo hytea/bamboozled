@@ -1,6 +1,7 @@
 import { getDatabase } from '../db/connection.js';
 import { GuessRepository } from '../db/repositories/guess.repository.js';
 import { UserRepository } from '../db/repositories/user.repository.js';
+import { WeeklyLeaderboardRepository } from '../db/repositories/weekly_leaderboard.repository.js';
 import { MoodService } from './mood.service.js';
 import type { UserStats, LeaderboardEntry } from '../types/index.js';
 import { sql } from 'kysely';
@@ -8,11 +9,13 @@ import { sql } from 'kysely';
 export class StatsService {
   private guessRepository: GuessRepository;
   private userRepository: UserRepository;
+  private weeklyLeaderboardRepository: WeeklyLeaderboardRepository;
   private moodService: MoodService;
 
   constructor() {
     this.guessRepository = new GuessRepository();
     this.userRepository = new UserRepository();
+    this.weeklyLeaderboardRepository = new WeeklyLeaderboardRepository();
     this.moodService = new MoodService();
   }
 
@@ -59,8 +62,8 @@ export class StatsService {
     // Get streak
     const currentStreak = await this.moodService.getUserStreak(userId);
 
-    // TODO: Implement best streak tracking
-    const bestStreak = currentStreak;
+    // Get best streak from user record
+    const bestStreak = user.best_streak;
 
     // Get mood tier info
     const moodTierInfo = this.moodService.getMoodTierInfo(user.mood_tier);
@@ -160,5 +163,72 @@ export class StatsService {
    */
   async hasUserSolvedPuzzle(userId: string, puzzleId: string): Promise<boolean> {
     return this.guessRepository.hasUserSolvedPuzzle(userId, puzzleId);
+  }
+
+  /**
+   * Persist the current weekly leaderboard for a puzzle
+   * This should be called when a puzzle becomes inactive or a week ends
+   */
+  async persistWeeklyLeaderboard(puzzleId: string, weekStartDate: string): Promise<void> {
+    // Check if leaderboard already persisted for this puzzle
+    const exists = await this.weeklyLeaderboardRepository.existsForPuzzle(puzzleId);
+    if (exists) {
+      console.log(`Leaderboard already persisted for puzzle ${puzzleId}`);
+      return;
+    }
+
+    // Calculate the current leaderboard from guesses
+    const leaderboard = await this.getWeeklyLeaderboard(puzzleId);
+
+    // Persist each entry
+    for (const entry of leaderboard) {
+      await this.weeklyLeaderboardRepository.create({
+        week_start_date: weekStartDate,
+        user_id: entry.user_id,
+        puzzle_id: puzzleId,
+        solve_time: entry.solve_time instanceof Date
+          ? entry.solve_time.toISOString()
+          : String(entry.solve_time),
+        total_guesses: entry.total_guesses,
+        rank: entry.rank
+      });
+    }
+
+    console.log(`✅ Persisted leaderboard for puzzle ${puzzleId} (${leaderboard.length} entries)`);
+  }
+
+  /**
+   * Get weekly leaderboard from database (for historical weeks)
+   * Returns persisted data if available, otherwise calculates from guesses
+   */
+  async getPersistedWeeklyLeaderboard(puzzleId: string): Promise<LeaderboardEntry[]> {
+    // Check if persisted leaderboard exists
+    const persistedEntries = await this.weeklyLeaderboardRepository.getByPuzzle(puzzleId);
+
+    if (persistedEntries.length > 0) {
+      // Return persisted data with user display names
+      return Promise.all(
+        persistedEntries.map(async (entry) => {
+          const user = await this.userRepository.findById(entry.user_id);
+          return {
+            user_id: entry.user_id,
+            display_name: user?.display_name || 'Unknown',
+            solve_time: entry.solve_time,
+            total_guesses: entry.total_guesses,
+            rank: entry.rank
+          };
+        })
+      );
+    }
+
+    // Fall back to calculating from guesses
+    return this.getWeeklyLeaderboard(puzzleId);
+  }
+
+  /**
+   * Get all weeks with leaderboard data
+   */
+  async getAvailableWeeks(): Promise<string[]> {
+    return this.weeklyLeaderboardRepository.getAllWeeks();
   }
 }

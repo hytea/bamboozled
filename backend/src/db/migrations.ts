@@ -8,6 +8,7 @@ export async function up(db: Kysely<any>): Promise<void> {
     .addColumn('user_id', 'text', (col) => col.primaryKey())
     .addColumn('display_name', 'text', (col) => col.notNull())
     .addColumn('mood_tier', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('best_streak', 'integer', (col) => col.notNull().defaultTo(0))
     .addColumn('created_at', 'text', (col) =>
       col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`)
     )

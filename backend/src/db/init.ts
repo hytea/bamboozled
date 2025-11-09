@@ -52,6 +52,7 @@ export async function checkDatabaseHealth(): Promise<boolean> {
  */
 export async function exportDatabaseData(): Promise<any> {
   const provider = await createDatabaseProvider();
+  await provider.connect();
   return await provider.exportData();
 }
 
@@ -60,5 +61,6 @@ export async function exportDatabaseData(): Promise<any> {
  */
 export async function importDatabaseData(data: any): Promise<void> {
   const provider = await createDatabaseProvider();
+  await provider.connect();
   await provider.importData(data);
 }

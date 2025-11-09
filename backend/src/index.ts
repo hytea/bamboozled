@@ -73,6 +73,11 @@ async function initializeDatabase() {
     }
 
     await initDatabase(shouldReset);
+
+    // Also initialize the singleton database connection
+    const { createDatabase } = await import('./db/connection.js');
+    await createDatabase();
+
     fastify.log.info('✅ Database initialized');
   } catch (error) {
     fastify.log.error(`❌ Failed to initialize database: ${error}`);
@@ -131,6 +136,27 @@ async function initializeSlackBot() {
   }
 }
 
+// Initialize scheduler
+async function initializeScheduler() {
+  try {
+    const { SchedulerService } = await import('./services/scheduler.service.js');
+    const schedulerService = new SchedulerService();
+    schedulerService.start();
+    fastify.log.info('✅ Puzzle rotation scheduler started');
+
+    // Store in fastify context for potential cleanup
+    fastify.decorate('schedulerService', schedulerService);
+
+    // Cleanup on shutdown
+    fastify.addHook('onClose', async () => {
+      schedulerService.stop();
+    });
+  } catch (error) {
+    fastify.log.error(`❌ Failed to initialize scheduler: ${error}`);
+    fastify.log.warn('⚠️  Continuing without automatic puzzle rotation');
+  }
+}
+
 // Start server
 const start = async () => {
   try {
@@ -142,6 +168,9 @@ const start = async () => {
 
     // Initialize Slack bot if enabled
     await initializeSlackBot();
+
+    // Initialize puzzle rotation scheduler
+    await initializeScheduler();
 
     // Start listening
     await fastify.listen({
