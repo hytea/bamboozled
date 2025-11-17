@@ -18,6 +18,8 @@ build/
 *.db-shm
 *.db-wal
 !.beads/*.db
+data/*
+!data/.gitkeep
 
 # IDE
 .vscode/

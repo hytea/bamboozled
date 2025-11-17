@@ -42,7 +42,10 @@ function App() {
     }
   }, [userName, setUserName]);
 
-  const wsUrl = `ws://${window.location.hostname}:3001/ws`;
+  // Use window.location.host to get hostname:port, so it works both in dev and Docker
+  // In dev: ws://localhost:5173/ws (Vite proxies to backend)
+  // In Docker: ws://localhost:3000/ws (Nginx proxies to backend)
+  const wsUrl = `ws://${window.location.host}/ws`;
 
   const { messages, sendMessage, isConnected } = useWebSocket(
     wsUrl,
