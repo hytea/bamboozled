@@ -1,12 +1,5 @@
-// User types
-export interface User {
-  user_id: string;
-  slack_user_id: string | null;
-  display_name: string;
-  mood_tier: number;
-  created_at: Date;
-  updated_at: Date;
-}
+// User types - re-export from schema
+export type { User } from '../db/schema.js';
 
 // Puzzle types
 export interface Puzzle {
