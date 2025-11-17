@@ -77,6 +77,36 @@ export type MoodHistory = Selectable<MoodHistoryTable>;
 export type NewMoodHistory = Insertable<MoodHistoryTable>;
 export type MoodHistoryUpdate = Updateable<MoodHistoryTable>;
 
+// Achievements table (defines all possible achievements)
+export interface AchievementsTable {
+  achievement_id: string;
+  achievement_key: string;
+  name: string;
+  description: string;
+  emoji: string;
+  category: 'streak' | 'solve' | 'speed' | 'efficiency' | 'comeback' | 'special';
+  tier: 'bronze' | 'silver' | 'gold' | 'platinum' | 'legendary';
+  is_secret: number; // 0 or 1 for SQLite boolean
+  created_at: ColumnType<Date, string | undefined, never>;
+}
+
+export type Achievement = Selectable<AchievementsTable>;
+export type NewAchievement = Insertable<AchievementsTable>;
+export type AchievementUpdate = Updateable<AchievementsTable>;
+
+// User Achievements table (tracks which users earned which achievements)
+export interface UserAchievementsTable {
+  user_achievement_id: Generated<string>;
+  user_id: string;
+  achievement_id: string;
+  unlocked_at: ColumnType<Date, string | undefined, never>;
+  progress_data: string | null; // JSON string for tracking progress toward achievements
+}
+
+export type UserAchievement = Selectable<UserAchievementsTable>;
+export type NewUserAchievement = Insertable<UserAchievementsTable>;
+export type UserAchievementUpdate = Updateable<UserAchievementsTable>;
+
 // Database interface
 export interface Database {
   users: UsersTable;
@@ -84,4 +114,6 @@ export interface Database {
   guesses: GuessesTable;
   weekly_leaderboards: WeeklyLeaderboardsTable;
   mood_history: MoodHistoryTable;
+  achievements: AchievementsTable;
+  user_achievements: UserAchievementsTable;
 }

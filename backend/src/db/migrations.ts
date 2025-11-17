@@ -129,9 +129,346 @@ export async function up(db: Kysely<any>): Promise<void> {
     .on('mood_history')
     .column('user_id')
     .execute();
+
+  // Achievements table
+  await db.schema
+    .createTable('achievements')
+    .addColumn('achievement_id', 'text', (col) => col.primaryKey())
+    .addColumn('achievement_key', 'text', (col) => col.notNull().unique())
+    .addColumn('name', 'text', (col) => col.notNull())
+    .addColumn('description', 'text', (col) => col.notNull())
+    .addColumn('emoji', 'text', (col) => col.notNull())
+    .addColumn('category', 'text', (col) => col.notNull())
+    .addColumn('tier', 'text', (col) => col.notNull())
+    .addColumn('is_secret', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('created_at', 'text', (col) =>
+      col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`)
+    )
+    .execute();
+
+  // Index for achievement category
+  await db.schema
+    .createIndex('idx_achievements_category')
+    .on('achievements')
+    .column('category')
+    .execute();
+
+  // User Achievements table
+  await db.schema
+    .createTable('user_achievements')
+    .addColumn('user_achievement_id', 'text', (col) => col.primaryKey())
+    .addColumn('user_id', 'text', (col) =>
+      col.notNull().references('users.user_id').onDelete('cascade')
+    )
+    .addColumn('achievement_id', 'text', (col) =>
+      col.notNull().references('achievements.achievement_id').onDelete('cascade')
+    )
+    .addColumn('unlocked_at', 'text', (col) =>
+      col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`)
+    )
+    .addColumn('progress_data', 'text')
+    .execute();
+
+  // Indexes for user achievements
+  await db.schema
+    .createIndex('idx_user_achievements_user_id')
+    .on('user_achievements')
+    .column('user_id')
+    .execute();
+
+  await db.schema
+    .createIndex('idx_user_achievements_achievement_id')
+    .on('user_achievements')
+    .column('achievement_id')
+    .execute();
+
+  // Unique constraint to prevent duplicate achievements
+  await db.schema
+    .createIndex('idx_user_achievements_unique')
+    .on('user_achievements')
+    .columns(['user_id', 'achievement_id'])
+    .unique()
+    .execute();
+
+  // Seed achievements
+  await seedAchievements(db);
+}
+
+/**
+ * Seed initial achievements into the database
+ */
+async function seedAchievements(db: Kysely<any>): Promise<void> {
+  const achievements = [
+    // Streak Achievements
+    {
+      achievement_id: 'streak_first_blood',
+      achievement_key: 'FIRST_BLOOD',
+      name: 'First Blood',
+      description: 'Solve your first puzzle',
+      emoji: '🎯',
+      category: 'streak',
+      tier: 'bronze',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'streak_hat_trick',
+      achievement_key: 'HAT_TRICK',
+      name: 'Hat Trick',
+      description: 'Solve 3 puzzles in a row',
+      emoji: '🎩',
+      category: 'streak',
+      tier: 'bronze',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'streak_week_warrior',
+      achievement_key: 'WEEK_WARRIOR',
+      name: 'Week Warrior',
+      description: 'Maintain a 7-week streak',
+      emoji: '⚔️',
+      category: 'streak',
+      tier: 'silver',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'streak_unstoppable',
+      achievement_key: 'UNSTOPPABLE',
+      name: 'Unstoppable Force',
+      description: 'Maintain a 15-week streak',
+      emoji: '💪',
+      category: 'streak',
+      tier: 'gold',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'streak_legendary',
+      achievement_key: 'LEGENDARY_STREAK',
+      name: 'Legendary Streak',
+      description: 'Maintain a 25-week streak',
+      emoji: '🔥',
+      category: 'streak',
+      tier: 'legendary',
+      is_secret: 0
+    },
+
+    // Solve Count Achievements
+    {
+      achievement_id: 'solve_rookie',
+      achievement_key: 'ROOKIE',
+      name: 'Rookie Riddler',
+      description: 'Solve 5 total puzzles',
+      emoji: '🌱',
+      category: 'solve',
+      tier: 'bronze',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'solve_veteran',
+      achievement_key: 'VETERAN',
+      name: 'Veteran Solver',
+      description: 'Solve 20 total puzzles',
+      emoji: '🎖️',
+      category: 'solve',
+      tier: 'silver',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'solve_master',
+      achievement_key: 'MASTER',
+      name: 'Puzzle Master',
+      description: 'Solve 50 total puzzles',
+      emoji: '👑',
+      category: 'solve',
+      tier: 'gold',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'solve_legend',
+      achievement_key: 'LEGEND',
+      name: 'Living Legend',
+      description: 'Solve 100 total puzzles',
+      emoji: '🏆',
+      category: 'solve',
+      tier: 'legendary',
+      is_secret: 0
+    },
+
+    // Speed Achievements
+    {
+      achievement_id: 'speed_flash',
+      achievement_key: 'FLASH',
+      name: 'The Flash',
+      description: 'Solve a puzzle in under 1 minute',
+      emoji: '⚡',
+      category: 'speed',
+      tier: 'gold',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'speed_speedrun',
+      achievement_key: 'SPEEDRUN',
+      name: 'Speedrunner',
+      description: 'Solve a puzzle in under 5 minutes',
+      emoji: '🏃',
+      category: 'speed',
+      tier: 'silver',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'speed_quick_draw',
+      achievement_key: 'QUICK_DRAW',
+      name: 'Quick Draw',
+      description: 'Finish in 1st place 5 times',
+      emoji: '🥇',
+      category: 'speed',
+      tier: 'gold',
+      is_secret: 0
+    },
+
+    // Efficiency Achievements
+    {
+      achievement_id: 'efficiency_one_shot',
+      achievement_key: 'ONE_SHOT',
+      name: 'One-Shot Wonder',
+      description: 'Solve a puzzle on your first guess',
+      emoji: '🎯',
+      category: 'efficiency',
+      tier: 'legendary',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'efficiency_sharp',
+      achievement_key: 'SHARP_SHOOTER',
+      name: 'Sharp Shooter',
+      description: 'Solve 10 puzzles with 3 or fewer guesses',
+      emoji: '🎪',
+      category: 'efficiency',
+      tier: 'gold',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'efficiency_sniper',
+      achievement_key: 'SNIPER',
+      name: 'Sniper',
+      description: 'Maintain an average of 2 guesses or less',
+      emoji: '🎯',
+      category: 'efficiency',
+      tier: 'platinum',
+      is_secret: 0
+    },
+
+    // Comeback Achievements
+    {
+      achievement_id: 'comeback_phoenix',
+      achievement_key: 'PHOENIX',
+      name: 'Phoenix Rising',
+      description: 'Start a new 5-week streak after breaking one',
+      emoji: '🔥',
+      category: 'comeback',
+      tier: 'silver',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'comeback_redemption',
+      achievement_key: 'REDEMPTION',
+      name: 'Redemption Arc',
+      description: 'Regain your best streak after losing it',
+      emoji: '✨',
+      category: 'comeback',
+      tier: 'gold',
+      is_secret: 0
+    },
+
+    // Special/Quirky Achievements
+    {
+      achievement_id: 'special_night_owl',
+      achievement_key: 'NIGHT_OWL',
+      name: 'Night Owl',
+      description: 'Solve a puzzle between 11pm and 3am',
+      emoji: '🦉',
+      category: 'special',
+      tier: 'bronze',
+      is_secret: 1
+    },
+    {
+      achievement_id: 'special_early_bird',
+      achievement_key: 'EARLY_BIRD',
+      name: 'Early Bird',
+      description: 'Solve a puzzle between 5am and 7am',
+      emoji: '🐦',
+      category: 'special',
+      tier: 'bronze',
+      is_secret: 1
+    },
+    {
+      achievement_id: 'special_lucky13',
+      achievement_key: 'LUCKY_13',
+      name: 'Lucky 13',
+      description: 'Solve a puzzle on your 13th guess',
+      emoji: '🍀',
+      category: 'special',
+      tier: 'silver',
+      is_secret: 1
+    },
+    {
+      achievement_id: 'special_perfectionist',
+      achievement_key: 'PERFECTIONIST',
+      name: 'The Perfectionist',
+      description: 'Reach tier 6 (The Worshipper)',
+      emoji: '💎',
+      category: 'special',
+      tier: 'platinum',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'special_comeback_kid',
+      achievement_key: 'COMEBACK_KID',
+      name: 'Comeback Kid',
+      description: 'Solve after 10+ incorrect guesses',
+      emoji: '🎭',
+      category: 'special',
+      tier: 'bronze',
+      is_secret: 1
+    },
+    {
+      achievement_id: 'special_century_club',
+      achievement_key: 'CENTURY_CLUB',
+      name: 'Century Club',
+      description: 'Make 100 total guesses (correct or not)',
+      emoji: '💯',
+      category: 'special',
+      tier: 'silver',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'special_social_butterfly',
+      achievement_key: 'SOCIAL_BUTTERFLY',
+      name: 'Social Butterfly',
+      description: 'Check the leaderboard 25 times',
+      emoji: '🦋',
+      category: 'special',
+      tier: 'bronze',
+      is_secret: 1
+    }
+  ];
+
+  // Insert achievements with timestamps
+  for (const achievement of achievements) {
+    await db
+      .insertInto('achievements')
+      .values({
+        ...achievement,
+        created_at: new Date().toISOString()
+      })
+      .execute();
+  }
+
+  console.log(`✅ Seeded ${achievements.length} achievements`);
 }
 
 export async function down(db: Kysely<any>): Promise<void> {
+  await db.schema.dropTable('user_achievements').execute();
+  await db.schema.dropTable('achievements').execute();
   await db.schema.dropTable('mood_history').execute();
   await db.schema.dropTable('weekly_leaderboards').execute();
   await db.schema.dropTable('guesses').execute();
