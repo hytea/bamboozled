@@ -78,6 +78,26 @@ export type MoodHistory = Selectable<MoodHistoryTable>;
 export type NewMoodHistory = Insertable<MoodHistoryTable>;
 export type MoodHistoryUpdate = Updateable<MoodHistoryTable>;
 
+// Generated Puzzles table
+export interface GeneratedPuzzlesTable {
+  generated_puzzle_id: Generated<string>;
+  puzzle_concept: string; // Text description of the visual puzzle
+  answer: string;
+  visual_description: string; // How it should be displayed visually
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  generated_by: string; // user_id who requested generation
+  reviewed_by: string | null; // user_id who reviewed
+  created_at: ColumnType<Date, string | undefined, never>;
+  reviewed_at: ColumnType<Date, string | undefined, string> | null;
+  rejection_reason: string | null;
+  theme: string | null; // Optional theme (holidays, sports, etc.)
+}
+
+export type GeneratedPuzzle = Selectable<GeneratedPuzzlesTable>;
+export type NewGeneratedPuzzle = Insertable<GeneratedPuzzlesTable>;
+export type GeneratedPuzzleUpdate = Updateable<GeneratedPuzzlesTable>;
+
 // Database interface
 export interface Database {
   users: UsersTable;
@@ -85,4 +105,5 @@ export interface Database {
   guesses: GuessesTable;
   weekly_leaderboards: WeeklyLeaderboardsTable;
   mood_history: MoodHistoryTable;
+  generated_puzzles: GeneratedPuzzlesTable;
 }
