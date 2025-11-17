@@ -1,7 +1,7 @@
 import type { Kysely } from 'kysely';
 import type { Database } from './schema.js';
 import { randomUUID } from 'crypto';
-import { createDatabaseProvider, getDatabaseProvider } from './providers/factory.js';
+import { createDatabaseProvider } from './providers/factory.js';
 
 let db: Kysely<Database> | null = null;
 

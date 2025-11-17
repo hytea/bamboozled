@@ -3,6 +3,7 @@ import type { ColumnType, Generated, Insertable, Selectable, Updateable } from '
 // Users table
 export interface UsersTable {
   user_id: string;
+  slack_user_id: string | null;
   display_name: string;
   mood_tier: number;
   best_streak: number;

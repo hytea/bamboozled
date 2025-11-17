@@ -12,7 +12,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 const envSchema = z.object({
   // AI Provider
-  AI_PROVIDER: z.enum(['claude', 'openrouter', 'local']).default('claude'),
+  AI_PROVIDER: z.enum(['claude', 'openrouter', 'local', 'mock']).default('claude'),
   AI_API_KEY: z.string().optional(),
 
   // Claude

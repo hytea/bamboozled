@@ -19,7 +19,8 @@ export class UserService {
       user = await this.userRepository.create({
         user_id: userId,
         display_name: displayName,
-        mood_tier: 0
+        mood_tier: 0,
+        best_streak: 0
       });
     }
 
@@ -52,6 +53,54 @@ export class UserService {
    */
   async getAllUsers(): Promise<User[]> {
     return this.userRepository.getAll();
+  }
+
+  /**
+   * Get or create user by Slack user ID
+   */
+  async getOrCreateUserBySlackId(slackUserId: string, displayName: string): Promise<User> {
+    let user = await this.userRepository.findBySlackUserId(slackUserId);
+
+    if (!user) {
+      const userId = `slack_${slackUserId}`;
+      user = await this.userRepository.create({
+        user_id: userId,
+        slack_user_id: slackUserId,
+        display_name: displayName,
+        mood_tier: 0,
+        best_streak: 0
+      });
+    }
+
+    return user;
+  }
+
+  /**
+   * Get or create user by display name
+   */
+  async getOrCreateUserByDisplayName(displayName: string): Promise<User> {
+    let user = await this.userRepository.findByDisplayName(displayName);
+
+    if (!user) {
+      const userId = `web_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      user = await this.userRepository.create({
+        user_id: userId,
+        slack_user_id: null,
+        display_name: displayName,
+        mood_tier: 0,
+        best_streak: 0
+      });
+    }
+
+    return user;
+  }
+
+  /**
+   * Check if display name is available
+   */
+  async isDisplayNameAvailable(displayName: string): Promise<boolean> {
+    const user = await this.userRepository.findByDisplayName(displayName);
+    return !user;
   }
 }
 

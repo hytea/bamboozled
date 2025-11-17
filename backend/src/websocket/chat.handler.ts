@@ -34,28 +34,40 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
   const guessService = new GuessService(aiProvider);
 
   fastify.get('/ws', { websocket: true }, (socket, request) => {
-    fastify.log.info('WebSocket connection established from:', request.socket.remoteAddress);
-    fastify.log.info('Initial socket state:', socket.readyState);
+    fastify.log.info({ remoteAddress: request.socket.remoteAddress }, 'WebSocket connection established');
+    fastify.log.info({ state: socket.readyState }, 'Initial socket state');
 
     socket.on('error', (error) => {
-      fastify.log.error('WebSocket socket error:', error);
-      fastify.log.error('Socket state during error:', socket.readyState);
+      fastify.log.error({ error }, 'WebSocket socket error');
+      fastify.log.error({ state: socket.readyState }, 'Socket state during error');
     });
 
     socket.on('message', async (rawMessage: Buffer) => {
       try {
-        fastify.log.info('Received WebSocket message:', rawMessage.toString());
-        fastify.log.info('Socket state before processing:', socket.readyState);
-        const message: IncomingMessage = JSON.parse(rawMessage.toString());
+        fastify.log.info({ message: rawMessage.toString() }, 'Received WebSocket message');
+        fastify.log.info({ state: socket.readyState }, 'Socket state before processing');
+
+        let message: IncomingMessage;
+        try {
+          message = JSON.parse(rawMessage.toString());
+        } catch (parseError) {
+          fastify.log.error({ error: parseError }, 'Failed to parse JSON message');
+          socket.send(JSON.stringify({
+            type: 'bot',
+            content: 'Error: Invalid message format',
+            timestamp: new Date().toISOString()
+          } as ChatMessage));
+          return;
+        }
 
         if (message.type === 'init') {
-          fastify.log.info('Processing init message for user:', message.userName);
+          fastify.log.info({ userName: message.userName }, 'Processing init message for user');
 
           try {
             // Initialize user
             const user = await userService.getOrCreateUserByDisplayName(message.userName || 'Player');
-            fastify.log.info('User created/found:', user.display_name);
-            fastify.log.info('Socket state after user creation:', socket.readyState);
+            fastify.log.info({ displayName: user.display_name }, 'User created/found');
+            fastify.log.info({ state: socket.readyState }, 'Socket state after user creation');
 
             const response = JSON.stringify({
               type: 'bot',
@@ -65,12 +77,12 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
               metadata: { moodTier: user.mood_tier }
             } as ChatMessage);
 
-            fastify.log.info('Sending welcome message, socket state:', socket.readyState);
-            fastify.log.info('Response size:', Buffer.byteLength(response), 'bytes');
+            fastify.log.info({ state: socket.readyState }, 'Sending welcome message');
+            fastify.log.info({ size: Buffer.byteLength(response) }, 'Response size in bytes');
 
             if (socket.readyState === 1) { // 1 = OPEN
               socket.send(response);
-              fastify.log.info('Welcome message sent successfully, socket state after send:', socket.readyState);
+              fastify.log.info({ state: socket.readyState }, 'Welcome message sent successfully');
 
               // Automatically send the current puzzle
               const puzzle = await puzzleService.getActivePuzzle();
@@ -87,10 +99,10 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
                 fastify.log.info('Puzzle sent automatically after init');
               }
             } else {
-              fastify.log.error('Socket not in OPEN state, cannot send. State:', socket.readyState);
+              fastify.log.error({ state: socket.readyState }, 'Socket not in OPEN state, cannot send');
             }
           } catch (initError) {
-            fastify.log.error('Error during init processing:', initError);
+            fastify.log.error({ error: initError }, 'Error during init processing');
             throw initError;
           }
 
@@ -125,7 +137,7 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
           await handleGuess(socket, message, { guessService, statsService });
         }
 
-        fastify.log.info('Message processing complete, socket state:', socket.readyState);
+        fastify.log.info({ state: socket.readyState }, 'Message processing complete');
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         const errorStack = error instanceof Error ? error.stack : 'No stack trace';
@@ -140,13 +152,13 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
             } as ChatMessage));
           }
         } catch (sendError) {
-          fastify.log.error('Failed to send error message:', sendError);
+          fastify.log.error({ error: sendError }, 'Failed to send error message');
         }
       }
     });
 
     socket.on('close', (code, reason) => {
-      fastify.log.info('WebSocket connection closed:', { code, reason: reason.toString() });
+      fastify.log.info({ code, reason: reason.toString() }, 'WebSocket connection closed');
     });
 
     socket.on('ping', () => {

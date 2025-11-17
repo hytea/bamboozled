@@ -37,6 +37,15 @@ export class UserRepository {
       .executeTakeFirst();
   }
 
+  async findBySlackUserId(slackUserId: string): Promise<User | undefined> {
+    const db = getDatabase();
+    return db
+      .selectFrom('users')
+      .selectAll()
+      .where('slack_user_id', '=', slackUserId)
+      .executeTakeFirst();
+  }
+
   async update(userId: string, updates: UserUpdate): Promise<User> {
     const db = getDatabase();
     return db

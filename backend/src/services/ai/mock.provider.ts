@@ -99,7 +99,7 @@ export class MockAIProvider implements AIProvider {
     return matrix[str2.length][str1.length];
   }
 
-  async determineIntent(message: string, availableCommands: string[]): Promise<string> {
+  async determineIntent(message: string, _availableCommands: string[]): Promise<string> {
     const lowerMessage = message.toLowerCase();
 
     if (lowerMessage.includes('puzzle')) {

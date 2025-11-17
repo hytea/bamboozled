@@ -29,7 +29,7 @@ export class WeeklyLeaderboardRepository {
     return db
       .selectFrom('weekly_leaderboards')
       .selectAll()
-      .where('week_start_date', '=', weekStartDate)
+      .where('week_start_date', '=', weekStartDate as any)
       .orderBy('rank', 'asc')
       .execute();
   }

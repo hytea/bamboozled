@@ -145,13 +145,16 @@ export class SlackService {
             // Upload image to Slack
             try {
               const imageBuffer = fs.readFileSync(imagePath);
-              const result = await this.app.client.files.uploadV2({
+              const uploadParams: any = {
                 channel_id: channelId,
-                ...(threadTs && { thread_ts: threadTs }),
                 file: imageBuffer,
                 filename: activePuzzle.image_path,
                 title: 'Current Puzzle'
-              }) as any;
+              };
+              if (threadTs) {
+                uploadParams.thread_ts = threadTs;
+              }
+              const result = await this.app.client.files.uploadV2(uploadParams) as any;
 
               if (result.file?.permalink) {
                 blocks.push({

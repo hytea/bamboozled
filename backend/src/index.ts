@@ -23,7 +23,9 @@ const fastify = Fastify({
 
 // Register plugins
 await fastify.register(fastifyCors, {
-  origin: true // Allow all origins in development
+  origin: config.NODE_ENV === 'production'
+    ? ['https://yourdomain.com'] // Replace with actual production domain
+    : true // Allow all origins in development
 });
 
 await fastify.register(fastifyWebsocket, {
