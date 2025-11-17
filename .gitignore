@@ -21,6 +21,10 @@ build/
 data/*
 !data/.gitkeep
 
+# Puzzles (ignore images but keep directory structure)
+puzzles/images/*
+!puzzles/images/.gitkeep
+
 # IDE
 .vscode/
 .idea/

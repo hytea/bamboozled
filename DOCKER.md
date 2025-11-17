@@ -11,6 +11,24 @@ To install Docker:
 - **macOS/Windows**: Install [Docker Desktop](https://www.docker.com/products/docker-desktop)
 - **Linux**: Follow [Docker Engine installation guide](https://docs.docker.com/engine/install/)
 
+## Verify Your Setup
+
+**Before starting**, run the verification script to check your setup:
+
+```bash
+./docker-verify.sh
+```
+
+This script will:
+- ✅ Check Docker and Docker Compose are installed
+- ✅ Verify all required files exist
+- ✅ Check your environment configuration
+- ✅ Ensure data directories are created
+- ✅ Verify ports 3000 and 3001 are available
+- ✅ Validate your API key configuration
+
+If any issues are found, the script will provide clear instructions on how to fix them.
+
 ## Quick Start
 
 ### 1. Configure Environment Variables
