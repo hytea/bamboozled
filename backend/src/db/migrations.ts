@@ -130,9 +130,46 @@ export async function up(db: Kysely<any>): Promise<void> {
     .on('mood_history')
     .column('user_id')
     .execute();
+
+  // Generated Puzzles table
+  await db.schema
+    .createTable('generated_puzzles')
+    .addColumn('generated_puzzle_id', 'text', (col) => col.primaryKey())
+    .addColumn('puzzle_concept', 'text', (col) => col.notNull())
+    .addColumn('answer', 'text', (col) => col.notNull())
+    .addColumn('visual_description', 'text', (col) => col.notNull())
+    .addColumn('difficulty', 'text', (col) => col.notNull())
+    .addColumn('status', 'text', (col) => col.notNull().defaultTo('PENDING'))
+    .addColumn('generated_by', 'text', (col) =>
+      col.notNull().references('users.user_id').onDelete('cascade')
+    )
+    .addColumn('reviewed_by', 'text', (col) =>
+      col.references('users.user_id').onDelete('set null')
+    )
+    .addColumn('created_at', 'text', (col) =>
+      col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`)
+    )
+    .addColumn('reviewed_at', 'text')
+    .addColumn('rejection_reason', 'text')
+    .addColumn('theme', 'text')
+    .execute();
+
+  // Indexes for generated puzzles
+  await db.schema
+    .createIndex('idx_generated_puzzles_status')
+    .on('generated_puzzles')
+    .column('status')
+    .execute();
+
+  await db.schema
+    .createIndex('idx_generated_puzzles_generated_by')
+    .on('generated_puzzles')
+    .column('generated_by')
+    .execute();
 }
 
 export async function down(db: Kysely<any>): Promise<void> {
+  await db.schema.dropTable('generated_puzzles').execute();
   await db.schema.dropTable('mood_history').execute();
   await db.schema.dropTable('weekly_leaderboards').execute();
   await db.schema.dropTable('guesses').execute();
