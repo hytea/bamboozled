@@ -4,6 +4,7 @@ import { UserService } from './user.service.js';
 import { MoodService } from './mood.service.js';
 import { StatsService } from './stats.service.js';
 import { GiphyService } from './giphy.service.js';
+import { AchievementService, type AchievementUnlock } from './achievement.service.js';
 import type { AIProvider } from '../types/index.js';
 import type { Guess } from '../db/schema.js';
 
@@ -16,6 +17,7 @@ export interface SubmitGuessResult {
   newTier?: number;
   gifUrl?: string;
   showLeaderboard?: boolean;
+  achievements?: AchievementUnlock[];
 }
 
 export class GuessService {
@@ -25,6 +27,7 @@ export class GuessService {
   private moodService: MoodService;
   private statsService: StatsService;
   private giphyService: GiphyService;
+  private achievementService: AchievementService;
   private aiProvider: AIProvider;
 
   constructor(aiProvider: AIProvider) {
@@ -34,6 +37,7 @@ export class GuessService {
     this.moodService = new MoodService();
     this.statsService = new StatsService();
     this.giphyService = new GiphyService();
+    this.achievementService = new AchievementService();
     this.aiProvider = aiProvider;
   }
 
@@ -185,8 +189,9 @@ export class GuessService {
     let oldTier = user.mood_tier;
     let newTier = user.mood_tier;
     let gifUrl: string | undefined;
+    let achievements: AchievementUnlock[] = [];
 
-    // If correct, update mood tier, get GIF, and check for tier changes
+    // If correct, update mood tier, get GIF, check achievements, and check for tier changes
     if (validation.is_correct) {
       const moodUpdate = await this.moodService.updateMoodTierAfterSolve(userId);
       tierChanged = moodUpdate.tierChanged;
@@ -195,6 +200,14 @@ export class GuessService {
 
       // Fetch celebration GIF based on mood tier
       gifUrl = await this.giphyService.getMoodTierCelebrationGif(newTier);
+
+      // Check and award achievements
+      achievements = await this.achievementService.checkAndAwardAchievements(
+        userId,
+        activePuzzle.puzzle_id,
+        guessNumber,
+        new Date()
+      );
     }
 
     return {
@@ -205,7 +218,8 @@ export class GuessService {
       oldTier,
       newTier,
       gifUrl,
-      showLeaderboard: validation.is_correct
+      showLeaderboard: validation.is_correct,
+      achievements
     };
   }
 

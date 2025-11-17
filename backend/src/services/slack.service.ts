@@ -5,7 +5,7 @@ import { GuessService } from './guess.service.js';
 import { StatsService } from './stats.service.js';
 import { MoodService } from './mood.service.js';
 import { UserService } from './user.service.js';
-import { PuzzleGeneratorService } from './puzzle-generator.service.js';
+import { AchievementService } from './achievement.service.js';
 import type { AIProvider, User } from '../types/index.js';
 import type { FastifyInstance } from 'fastify';
 import * as fs from 'fs';
@@ -17,7 +17,7 @@ export class SlackService {
   private statsService: StatsService;
   private moodService: MoodService;
   private userService: UserService;
-  private puzzleGeneratorService: PuzzleGeneratorService;
+  private achievementService: AchievementService;
   private aiProvider: AIProvider;
   private logger: FastifyInstance['log'];
 
@@ -40,7 +40,7 @@ export class SlackService {
     this.statsService = new StatsService();
     this.moodService = new MoodService();
     this.userService = new UserService();
-    this.puzzleGeneratorService = new PuzzleGeneratorService();
+    this.achievementService = new AchievementService();
     this.aiProvider = aiProvider;
     this.logger = logger;
 
@@ -94,39 +94,16 @@ export class SlackService {
       await this.handleNextWeekCommand(command.channel_id, undefined);
     });
 
-    // /generate - Generate a new AI puzzle
-    this.app.command('/generate', async ({ command, ack }) => {
+    // /badges or /achievements - View earned badges
+    this.app.command(/\/(badges|achievements)/, async ({ command, ack }) => {
       await ack();
-      const theme = command.text.trim() || undefined;
-      await this.handleGenerateCommand(command.channel_id, undefined, command.user_id, theme);
+      await this.handleBadgesCommand(command.channel_id, undefined, command.user_id);
     });
 
-    // /mypuzzles - View your generated puzzles
-    this.app.command('/mypuzzles', async ({ command, ack }) => {
+    // /allbadges - View all available badges
+    this.app.command('/allbadges', async ({ command, ack }) => {
       await ack();
-      await this.handleMyPuzzlesCommand(command.channel_id, undefined, command.user_id);
-    });
-
-    // /review - View pending puzzles (admin)
-    this.app.command('/review', async ({ command, ack }) => {
-      await ack();
-      await this.handleReviewCommand(command.channel_id, undefined, command.user_id);
-    });
-
-    // /approve - Approve a generated puzzle (admin)
-    this.app.command('/approve', async ({ command, ack }) => {
-      await ack();
-      const puzzleId = command.text.trim();
-      await this.handleApproveCommand(command.channel_id, undefined, command.user_id, puzzleId);
-    });
-
-    // /reject - Reject a generated puzzle (admin)
-    this.app.command('/reject', async ({ command, ack }) => {
-      await ack();
-      const args = command.text.trim().split(' ');
-      const puzzleId = args[0];
-      const reason = args.slice(1).join(' ') || 'No reason provided';
-      await this.handleRejectCommand(command.channel_id, undefined, command.user_id, puzzleId, reason);
+      await this.handleAllBadgesCommand(command.channel_id, undefined);
     });
   }
 
@@ -183,16 +160,13 @@ export class SlackService {
             // Upload image to Slack
             try {
               const imageBuffer = fs.readFileSync(imagePath);
-              const uploadParams: any = {
+              const result = await this.app.client.files.uploadV2({
                 channel_id: channelId,
+                ...(threadTs && { thread_ts: threadTs }),
                 file: imageBuffer,
                 filename: activePuzzle.image_path,
                 title: 'Current Puzzle'
-              };
-              if (threadTs) {
-                uploadParams.thread_ts = threadTs;
-              }
-              const result = await this.app.client.files.uploadV2(uploadParams) as any;
+              }) as any;
 
               if (result.file?.permalink) {
                 blocks.push({
@@ -307,7 +281,7 @@ export class SlackService {
         try {
           await this.ensureUser(userId);
           const stats = await this.statsService.getUserStats(userId);
-    
+
           if (!stats) {
             await this.app.client.chat.postMessage({
               channel: channelId,
@@ -316,7 +290,10 @@ export class SlackService {
             });
             return;
           }
-    
+
+          // Get achievement progress
+          const achievementProgress = await this.achievementService.getAchievementProgress(userId);
+
           const blocks: any[] = [
             {
               type: 'header',
@@ -348,11 +325,27 @@ export class SlackService {
                 {
                   type: 'mrkdwn',
                   text: `*Mood Tier:*\n${stats.mood_tier_name}`
+                },
+                {
+                  type: 'mrkdwn',
+                  text: `*Badges:*\n🏆 ${achievementProgress.unlocked}/${achievementProgress.total}`
                 }
               ]
             }
           ];
-    
+
+          if (achievementProgress.unlocked > 0) {
+            blocks.push({
+              type: 'context',
+              elements: [
+                {
+                  type: 'mrkdwn',
+                  text: '_Use */badges* to see your earned achievements_'
+                }
+              ]
+            });
+          }
+
           await this.app.client.chat.postMessage({
             channel: channelId,
             ...(threadTs && { thread_ts: threadTs }),
@@ -436,6 +429,13 @@ export class SlackService {
     */leaderboard* - View this week's leaderboard
     */stats* - View your personal statistics
     */alltime* - View all-time leaderboard
+    */badges* or */achievements* - View your earned badges
+    */allbadges* - View all available badges
+    */generate* [theme] - Generate a new AI puzzle
+    */mypuzzles* - View your generated puzzles
+    */review* - View pending puzzles (admin)
+    */approve* <id> - Approve a puzzle (admin)
+    */reject* <id> <reason> - Reject a puzzle (admin)
     */botmood* - Check the bot's mood toward you
     */nextweek* - Rotate to next puzzle (testing)
     */help* - Show this help message
@@ -583,6 +583,174 @@ export class SlackService {
             channel: channelId,
             ...(threadTs && { thread_ts: threadTs }),
             text: 'Sorry, I encountered an error rotating to the next puzzle.'
+          });
+        }
+      }
+
+      /**
+       * Handle /badges or /achievements command
+       */
+      private async handleBadgesCommand(channelId: string, threadTs: string | undefined, userId: string): Promise<void> {
+        try {
+          await this.ensureUser(userId);
+          const userAchievements = await this.achievementService.getUserAchievements(userId);
+          const progress = await this.achievementService.getAchievementProgress(userId);
+
+          const blocks: any[] = [
+            {
+              type: 'header',
+              text: {
+                type: 'plain_text',
+                text: '🏆 Your Achievement Badges',
+                emoji: true
+              }
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `*Progress:* ${progress.unlocked}/${progress.total} unlocked (${progress.percentage}%)`
+              }
+            }
+          ];
+
+          if (userAchievements.length === 0) {
+            blocks.push({
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: '_No badges yet! Start solving puzzles to earn achievements._'
+              }
+            });
+          } else {
+            // Group by category
+            const categories = ['streak', 'solve', 'speed', 'efficiency', 'comeback', 'special'];
+            const categoryNames: Record<string, string> = {
+              streak: '🔥 Streak',
+              solve: '🎯 Solve Count',
+              speed: '⚡ Speed',
+              efficiency: '🎪 Efficiency',
+              comeback: '✨ Comeback',
+              special: '🌟 Special'
+            };
+
+            for (const category of categories) {
+              const categoryBadges = userAchievements.filter(ua => ua.achievement.category === category);
+              if (categoryBadges.length > 0) {
+                const badgeList = categoryBadges
+                  .map(ua => `${ua.achievement.emoji} *${ua.achievement.name}* - _${ua.achievement.description}_`)
+                  .join('\n');
+
+                blocks.push({
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `*${categoryNames[category]}*\n${badgeList}`
+                  }
+                });
+              }
+            }
+          }
+
+          blocks.push({
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: '_Use */allbadges* to see all available achievements_'
+              }
+            ]
+          });
+
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            blocks
+          });
+        } catch (error) {
+          this.logger.error(`Error handling badges command: ${error}`);
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: 'Sorry, I encountered an error fetching your badges.'
+          });
+        }
+      }
+
+      /**
+       * Handle /allbadges command
+       */
+      private async handleAllBadgesCommand(channelId: string, threadTs: string | undefined): Promise<void> {
+        try {
+          const allAchievements = await this.achievementService.getAllAchievements(false); // Don't show secret ones
+
+          const blocks: any[] = [
+            {
+              type: 'header',
+              text: {
+                type: 'plain_text',
+                text: '🎯 All Available Badges',
+                emoji: true
+              }
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: '_Collect badges by solving puzzles and reaching milestones!_'
+              }
+            }
+          ];
+
+          // Group by category
+          const categories = ['streak', 'solve', 'speed', 'efficiency', 'comeback', 'special'];
+          const categoryNames: Record<string, string> = {
+            streak: '🔥 Streak Achievements',
+            solve: '🎯 Solve Count Achievements',
+            speed: '⚡ Speed Achievements',
+            efficiency: '🎪 Efficiency Achievements',
+            comeback: '✨ Comeback Achievements',
+            special: '🌟 Special Achievements'
+          };
+
+          for (const category of categories) {
+            const categoryBadges = allAchievements.filter(a => a.category === category);
+            if (categoryBadges.length > 0) {
+              const badgeList = categoryBadges
+                .map(a => `${a.emoji} *${a.name}* (${a.tier})\n_${a.description}_`)
+                .join('\n\n');
+
+              blocks.push({
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: `*${categoryNames[category]}*\n${badgeList}`
+                }
+              });
+            }
+          }
+
+          blocks.push({
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: '🤫 _Some secret achievements are hidden from this list..._'
+              }
+            ]
+          });
+
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            blocks
+          });
+        } catch (error) {
+          this.logger.error(`Error handling allbadges command: ${error}`);
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: 'Sorry, I encountered an error fetching all badges.'
           });
         }
       }
@@ -814,6 +982,10 @@ export class SlackService {
             intent = '/help';
           } else if (lowerText.match(/^(bot\s*mood|mood|attitude)/)) {
             intent = '/botmood';
+          } else if (lowerText.match(/^(badges|achievements|my\s*badges|my\s*achievements)/)) {
+            intent = '/badges';
+          } else if (lowerText.match(/^(all\s*badges|all\s*achievements)/)) {
+            intent = '/allbadges';
           } else if (lowerText.match(/^(hi|hello|hey|good\s*(morning|afternoon|evening))/)) {
             intent = 'none';
           } else {
@@ -825,6 +997,8 @@ export class SlackService {
               '/alltime',
               '/help',
               '/botmood',
+              '/badges',
+              '/allbadges',
               '/nextweek'
             ];
             intent = await this.aiProvider.determineIntent(text, availableCommands);
@@ -853,6 +1027,12 @@ export class SlackService {
               break;
             case '/nextweek':
               await this.handleNextWeekCommand(channelId, threadTs);
+              break;
+            case '/badges':
+              await this.handleBadgesCommand(channelId, threadTs, user.user_id);
+              break;
+            case '/allbadges':
+              await this.handleAllBadgesCommand(channelId, threadTs);
               break;
             case 'guess':
             default:
@@ -888,6 +1068,16 @@ export class SlackService {
                   channel: channelId,
                   thread_ts: threadTs,
                   text: `🎉 *You've advanced to ${tierInfo.name}!* 🎉\n_${tierInfo.description}_`
+                });
+              }
+
+              // Show achievements if any were unlocked
+              if (result.achievements && result.achievements.length > 0) {
+                const achievementMessage = this.achievementService.formatAchievementMessage(result.achievements);
+                await this.app.client.chat.postMessage({
+                  channel: channelId,
+                  thread_ts: threadTs,
+                  text: achievementMessage
                 });
               }
 
