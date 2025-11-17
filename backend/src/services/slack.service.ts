@@ -431,6 +431,11 @@ export class SlackService {
     */alltime* - View all-time leaderboard
     */badges* or */achievements* - View your earned badges
     */allbadges* - View all available badges
+    */generate* [theme] - Generate a new AI puzzle
+    */mypuzzles* - View your generated puzzles
+    */review* - View pending puzzles (admin)
+    */approve* <id> - Approve a puzzle (admin)
+    */reject* <id> <reason> - Reject a puzzle (admin)
     */botmood* - Check the bot's mood toward you
     */nextweek* - Rotate to next puzzle (testing)
     */help* - Show this help message
@@ -746,6 +751,195 @@ export class SlackService {
             channel: channelId,
             ...(threadTs && { thread_ts: threadTs }),
             text: 'Sorry, I encountered an error fetching all badges.'
+          });
+        }
+      }
+
+      /**
+       * Handle /generate command - Generate a new AI puzzle
+       */
+      private async handleGenerateCommand(channelId: string, threadTs: string | undefined, userId: string, theme?: string): Promise<void> {
+        try {
+          await this.ensureUser(userId);
+
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: '🤖 Generating a new puzzle with AI... This may take a moment!'
+          });
+
+          const generatedPuzzle = await this.puzzleGeneratorService.generatePuzzle({
+            userId,
+            theme,
+            difficulty: 'MEDIUM'
+          });
+
+          const blocks: any[] = [
+            {
+              type: 'header',
+              text: {
+                type: 'plain_text',
+                text: '✨ Puzzle Generated!',
+                emoji: true
+              }
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `*Answer:* ${generatedPuzzle.answer}\n*Concept:* ${generatedPuzzle.puzzle_concept}\n*Visual:* ${generatedPuzzle.visual_description}\n*Difficulty:* ${generatedPuzzle.difficulty}\n${theme ? `*Theme:* ${theme}` : ''}\n\n_Status: Pending admin review_\n_Puzzle ID: \`${generatedPuzzle.generated_puzzle_id}\`_`
+              }
+            }
+          ];
+
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            blocks
+          });
+        } catch (error) {
+          this.logger.error(`Error generating puzzle: ${error}`);
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: '❌ Sorry, I encountered an error generating the puzzle. Please try again.'
+          });
+        }
+      }
+
+      /**
+       * Handle /mypuzzles command - View your generated puzzles
+       */
+      private async handleMyPuzzlesCommand(channelId: string, threadTs: string | undefined, userId: string): Promise<void> {
+        try {
+          await this.ensureUser(userId);
+          const puzzles = await this.puzzleGeneratorService.getUserPuzzles(userId);
+
+          if (puzzles.length === 0) {
+            await this.app.client.chat.postMessage({
+              channel: channelId,
+              ...(threadTs && { thread_ts: threadTs }),
+              text: 'You haven\'t generated any puzzles yet! Use `/generate` to create one.'
+            });
+            return;
+          }
+
+          const puzzleList = puzzles.slice(0, 10).map((p, i) => {
+            const statusEmoji = p.status === 'APPROVED' ? '✅' : p.status === 'REJECTED' ? '❌' : '⏳';
+            return `${i + 1}. ${statusEmoji} *${p.answer}*\n   _${p.puzzle_concept}_ (ID: \`${p.generated_puzzle_id}\`)`;
+          }).join('\n\n');
+
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: `*Your Generated Puzzles:*\n\n${puzzleList}\n\n_Showing ${Math.min(10, puzzles.length)} of ${puzzles.length} puzzles_`
+          });
+        } catch (error) {
+          this.logger.error(`Error fetching user puzzles: ${error}`);
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: '❌ Sorry, I encountered an error fetching your puzzles.'
+          });
+        }
+      }
+
+      /**
+       * Handle /review command - View pending puzzles (admin)
+       */
+      private async handleReviewCommand(channelId: string, threadTs: string | undefined, userId: string): Promise<void> {
+        try {
+          const pendingPuzzles = await this.puzzleGeneratorService.getPendingPuzzles();
+
+          if (pendingPuzzles.length === 0) {
+            await this.app.client.chat.postMessage({
+              channel: channelId,
+              ...(threadTs && { thread_ts: threadTs }),
+              text: '✅ No puzzles pending review!'
+            });
+            return;
+          }
+
+          const stats = await this.puzzleGeneratorService.getStats();
+          const puzzleList = pendingPuzzles.slice(0, 5).map((p, i) => {
+            return `${i + 1}. *${p.answer}*\n   _${p.puzzle_concept}_\n   Visual: ${p.visual_description}\n   Difficulty: ${p.difficulty}\n   ID: \`${p.generated_puzzle_id}\``;
+          }).join('\n\n');
+
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: `*📋 Pending Puzzles (${stats.pending})*\n\n${puzzleList}\n\n_Use \`/approve <id>\` or \`/reject <id> <reason>\`_\n\n*Stats:* ${stats.total} total | ${stats.approved} approved | ${stats.rejected} rejected`
+          });
+        } catch (error) {
+          this.logger.error(`Error fetching pending puzzles: ${error}`);
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: '❌ Sorry, I encountered an error fetching pending puzzles.'
+          });
+        }
+      }
+
+      /**
+       * Handle /approve command - Approve a generated puzzle (admin)
+       */
+      private async handleApproveCommand(channelId: string, threadTs: string | undefined, reviewerId: string, puzzleId: string): Promise<void> {
+        try {
+          if (!puzzleId) {
+            await this.app.client.chat.postMessage({
+              channel: channelId,
+              ...(threadTs && { thread_ts: threadTs }),
+              text: '❌ Please provide a puzzle ID: `/approve <puzzle_id>`'
+            });
+            return;
+          }
+
+          await this.ensureUser(reviewerId);
+          const puzzle = await this.puzzleGeneratorService.approvePuzzle(puzzleId, reviewerId);
+
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: `✅ Approved puzzle: *${puzzle.answer}*\n_This puzzle can now be used in future rotations!_`
+          });
+        } catch (error) {
+          this.logger.error(`Error approving puzzle: ${error}`);
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: '❌ Sorry, I encountered an error approving the puzzle. Check that the ID is correct.'
+          });
+        }
+      }
+
+      /**
+       * Handle /reject command - Reject a generated puzzle (admin)
+       */
+      private async handleRejectCommand(channelId: string, threadTs: string | undefined, reviewerId: string, puzzleId: string, reason: string): Promise<void> {
+        try {
+          if (!puzzleId) {
+            await this.app.client.chat.postMessage({
+              channel: channelId,
+              ...(threadTs && { thread_ts: threadTs }),
+              text: '❌ Please provide a puzzle ID: `/reject <puzzle_id> <reason>`'
+            });
+            return;
+          }
+
+          await this.ensureUser(reviewerId);
+          const puzzle = await this.puzzleGeneratorService.rejectPuzzle(puzzleId, reviewerId, reason);
+
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: `❌ Rejected puzzle: *${puzzle.answer}*\n_Reason: ${reason}_`
+          });
+        } catch (error) {
+          this.logger.error(`Error rejecting puzzle: ${error}`);
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: '❌ Sorry, I encountered an error rejecting the puzzle. Check that the ID is correct.'
           });
         }
       }

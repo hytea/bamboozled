@@ -22,8 +22,18 @@ const fastify = Fastify({
 });
 
 // Register plugins
+// CORS configuration: Allow localhost for Docker, allow all for dev, specific domains for cloud production
 await fastify.register(fastifyCors, {
-  origin: true // Allow all origins in development
+  origin: config.NODE_ENV === 'production'
+    ? [
+        // Docker/local deployment
+        'http://localhost:3000',
+        'http://localhost',
+        'http://127.0.0.1:3000',
+        // Cloud production (update with your actual domain)
+        'https://yourdomain.com'
+      ]
+    : true // Allow all origins in development
 });
 
 await fastify.register(fastifyWebsocket, {

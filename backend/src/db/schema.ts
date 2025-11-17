@@ -3,6 +3,7 @@ import type { ColumnType, Generated, Insertable, Selectable, Updateable } from '
 // Users table
 export interface UsersTable {
   user_id: string;
+  slack_user_id: string | null;
   display_name: string;
   mood_tier: number;
   best_streak: number;
@@ -107,6 +108,26 @@ export type UserAchievement = Selectable<UserAchievementsTable>;
 export type NewUserAchievement = Insertable<UserAchievementsTable>;
 export type UserAchievementUpdate = Updateable<UserAchievementsTable>;
 
+// Generated Puzzles table
+export interface GeneratedPuzzlesTable {
+  generated_puzzle_id: Generated<string>;
+  puzzle_concept: string; // Text description of the visual puzzle
+  answer: string;
+  visual_description: string; // How it should be displayed visually
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  generated_by: string; // user_id who requested generation
+  reviewed_by: string | null; // user_id who reviewed
+  created_at: ColumnType<Date, string | undefined, never>;
+  reviewed_at: ColumnType<Date, string | undefined, string> | null;
+  rejection_reason: string | null;
+  theme: string | null; // Optional theme (holidays, sports, etc.)
+}
+
+export type GeneratedPuzzle = Selectable<GeneratedPuzzlesTable>;
+export type NewGeneratedPuzzle = Insertable<GeneratedPuzzlesTable>;
+export type GeneratedPuzzleUpdate = Updateable<GeneratedPuzzlesTable>;
+
 // Database interface
 export interface Database {
   users: UsersTable;
@@ -116,4 +137,5 @@ export interface Database {
   mood_history: MoodHistoryTable;
   achievements: AchievementsTable;
   user_achievements: UserAchievementsTable;
+  generated_puzzles: GeneratedPuzzlesTable;
 }

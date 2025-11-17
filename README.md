@@ -45,13 +45,10 @@ cd bamboozled
 cp .env.docker.example .env
 # Edit .env and add your API key
 
-# 3. Create data directory
-mkdir -p data
+# 3. Start the application
+docker-compose up --build
 
-# 4. Start the application
-docker-compose up -d
-
-# 5. Access the web chat
+# 4. Access the web chat
 open http://localhost:3000
 ```
 
@@ -59,6 +56,8 @@ That's it! The system is now running with:
 - Frontend at http://localhost:3000
 - Backend API at http://localhost:3001
 - Health check at http://localhost:3001/health
+
+**For detailed Docker instructions, troubleshooting, and production tips, see [DOCKER.md](./DOCKER.md)**
 
 ## 💻 Development Setup (Without Docker)
 
@@ -184,8 +183,12 @@ bamboozled/
 
 ## 📚 Documentation
 
+- [Docker Setup Guide](./DOCKER.md) - Detailed Docker instructions and troubleshooting
 - [Product Requirements Document](./bamboozled-prd.md) - Full feature specifications
 - [Deployment Guide](./DEPLOYMENT.md) - AWS, Docker, production setup
+- [OpenRouter Guide](./OPENROUTER.md) - OpenRouter configuration and model selection
+- [Ollama Guide](./OLLAMA.md) - Local AI model setup with Ollama
+- [Slack Integration](./SLACK.md) - Deploy as a Slack bot
 - [AI Agent Instructions](./AGENTS.md) - Issue tracking with Beads
 
 ## 🗂️ Issue Tracking

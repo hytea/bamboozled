@@ -71,7 +71,7 @@ export class SQLiteProvider implements DatabaseProvider {
 
     try {
       const tables = await this.db.introspection.getTables();
-      const requiredTables = ['users', 'puzzles', 'guesses', 'weekly_leaderboards', 'mood_history', 'achievements', 'user_achievements'];
+      const requiredTables = ['users', 'puzzles', 'guesses', 'weekly_leaderboards', 'mood_history', 'achievements', 'user_achievements', 'generated_puzzles'];
       const existingTableNames = tables.map(t => t.name);
 
       return requiredTables.every(table => existingTableNames.includes(table));
@@ -129,6 +129,7 @@ export class SQLiteProvider implements DatabaseProvider {
     const moodHistory = await this.db.selectFrom('mood_history').selectAll().execute();
     const achievements = await this.db.selectFrom('achievements').selectAll().execute();
     const userAchievements = await this.db.selectFrom('user_achievements').selectAll().execute();
+    const generatedPuzzles = await this.db.selectFrom('generated_puzzles').selectAll().execute();
 
     const exportData = {
       version: '1.0',
@@ -141,11 +142,12 @@ export class SQLiteProvider implements DatabaseProvider {
         weeklyLeaderboards,
         moodHistory,
         achievements,
-        userAchievements
+        userAchievements,
+        generatedPuzzles
       }
     };
 
-    console.log(`✅ Exported ${users.length} users, ${puzzles.length} puzzles, ${guesses.length} guesses, ${userAchievements.length} achievements`);
+    console.log(`✅ Exported ${users.length} users, ${puzzles.length} puzzles, ${guesses.length} guesses, ${userAchievements.length} user achievements, ${generatedPuzzles.length} generated puzzles`);
     return exportData;
   }
 
@@ -161,6 +163,7 @@ export class SQLiteProvider implements DatabaseProvider {
     }
 
     // Clear existing data
+    await this.db.deleteFrom('generated_puzzles').execute();
     await this.db.deleteFrom('user_achievements').execute();
     await this.db.deleteFrom('mood_history').execute();
     await this.db.deleteFrom('weekly_leaderboards').execute();
@@ -190,6 +193,9 @@ export class SQLiteProvider implements DatabaseProvider {
     }
     if (data.data.userAchievements?.length > 0) {
       await this.db.insertInto('user_achievements').values(data.data.userAchievements).execute();
+    }
+    if (data.data.generatedPuzzles?.length > 0) {
+      await this.db.insertInto('generated_puzzles').values(data.data.generatedPuzzles).execute();
     }
 
     console.log('✅ Data import complete');
