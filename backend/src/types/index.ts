@@ -100,4 +100,5 @@ export interface UserStats {
   first_place_finishes: number;
   mood_tier: number;
   mood_tier_name: string;
+  hint_coins: number;
 }

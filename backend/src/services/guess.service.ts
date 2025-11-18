@@ -5,6 +5,7 @@ import { MoodService } from './mood.service.js';
 import { StatsService } from './stats.service.js';
 import { GiphyService } from './giphy.service.js';
 import { AchievementService, type AchievementUnlock } from './achievement.service.js';
+import { HintService } from './hint.service.js';
 import type { AIProvider } from '../types/index.js';
 import type { Guess } from '../db/schema.js';
 
@@ -28,6 +29,7 @@ export class GuessService {
   private statsService: StatsService;
   private giphyService: GiphyService;
   private achievementService: AchievementService;
+  private hintService: HintService;
   private aiProvider: AIProvider;
 
   constructor(aiProvider: AIProvider) {
@@ -38,6 +40,7 @@ export class GuessService {
     this.statsService = new StatsService();
     this.giphyService = new GiphyService();
     this.achievementService = new AchievementService();
+    this.hintService = new HintService(aiProvider);
     this.aiProvider = aiProvider;
   }
 
@@ -191,7 +194,7 @@ export class GuessService {
     let gifUrl: string | undefined;
     let achievements: AchievementUnlock[] = [];
 
-    // If correct, update mood tier, get GIF, check achievements, and check for tier changes
+    // If correct, update mood tier, get GIF, check achievements, award hint coins, and check for tier changes
     if (validation.is_correct) {
       const moodUpdate = await this.moodService.updateMoodTierAfterSolve(userId);
       tierChanged = moodUpdate.tierChanged;
@@ -208,6 +211,12 @@ export class GuessService {
         guessNumber,
         new Date()
       );
+
+      // Award hint coins for solving
+      const firstCorrectGuess = await this.guessRepository.getFirstCorrectGuessForPuzzle(activePuzzle.puzzle_id);
+      const isFirstPlace = firstCorrectGuess?.user_id === userId;
+      const coinsToAward = this.hintService.calculateCoinsForSolve(guessNumber, streak, isFirstPlace);
+      await this.hintService.awardCoins(userId, coinsToAward, `Solved puzzle in ${guessNumber} guess(es)`);
     }
 
     return {
