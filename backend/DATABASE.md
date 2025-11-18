@@ -2,6 +2,12 @@
 
 This document describes the database provider pattern and management scripts.
 
+## 📚 Documentation
+
+- **[Database Developer Guide](./DATABASE_GUIDE.md)** - Complete guide for working with the database (especially helpful for frontend engineers!)
+- **[Quick Reference](./DATABASE_QUICK_REF.md)** - One-page cheat sheet for common operations
+- **This Document** - Provider pattern and management scripts reference
+
 ## Provider Pattern
 
 The database layer uses a provider pattern allowing you to swap between different database backends:
@@ -50,68 +56,90 @@ npm run db:reset
 
 ## Management Scripts
 
-### Initialize Database
+### Migration Commands (Recommended)
 
-Create tables if they don't exist (safe, won't delete data):
+The new versioned migration system provides better control over schema changes:
 
 ```bash
-cd backend
+# Run pending migrations
+npm run db:migrate
+
+# Check migration status
+npm run db:migrate:status
+
+# Rollback last batch of migrations
+npm run db:migrate:rollback
+
+# Create a new migration
+npm run db:make-migration add_feature_name
+
+# Reset database and re-run all migrations
+npm run db:migrate:fresh
+
+# Rollback all migrations
+npm run db:migrate:reset
+```
+
+### Development Data Seeding
+
+Quickly populate your database with realistic test data:
+
+```bash
+# Seed realistic data (10 users, 5 puzzles, 50 guesses)
+npm run db:seed
+
+# Seed minimal data (2 users, 1 puzzle, 5 guesses)
+npm run db:seed:minimal
+
+# Seed stress test data (50 users, 20 puzzles, 500 guesses)
+npm run db:seed:stress
+
+# Clear all data (achievements preserved)
+npm run db:seed:clear
+```
+
+### Legacy Commands (Still Supported)
+
+```bash
+# Initialize database (create tables if they don't exist)
 npm run db:init
-```
 
-### Reset Database
-
-**WARNING**: This deletes all data!
-
-```bash
-cd backend
+# Reset database (WARNING: deletes all data!)
 npm run db:reset
-```
 
-### Check Database Health
-
-View database status and contents:
-
-```bash
-cd backend
+# Check database health
 npm run db:health
+
+# Export data to JSON backup
+npm run db:export
+
+# Import data from JSON backup
+npm run db:import backup.json
 ```
 
-Example output:
-```
-🏥 Checking database health...
-
-📊 Database Status:
-  Provider: sqlite
-  Initialized: ✅
-  Healthy: ✅
-
-📈 Database Contents:
-  Users: 5
-  Puzzles: 30
-  Guesses: 42
-```
-
-### Export Data (Backup)
-
-Export all data to a JSON file for backup or migration:
+### Typical Development Workflow
 
 ```bash
-cd backend
-npm run db:export                # Creates backup-YYYY-MM-DD.json
-npm run db:export my-backup.json  # Custom filename
+# First time setup
+npm run db:migrate        # Create all tables
+npm run db:seed           # Add test data
+
+# Make a schema change
+npm run db:make-migration add_new_column
+# Edit the generated migration file
+npm run db:migrate        # Apply the change
+
+# Need fresh data?
+npm run db:seed:clear     # Clear old data
+npm run db:seed           # Add fresh data
+
+# Made a mistake?
+npm run db:migrate:rollback  # Undo last migration
+
+# Want to start completely fresh?
+npm run db:migrate:fresh  # Reset everything
+npm run db:seed           # Add test data
 ```
-
-### Import Data (Restore)
-
-Restore data from a backup file:
-
-```bash
-cd backend
-npm run db:import my-backup.json
-```
-
-**WARNING**: This replaces all existing data!
 
 ## Implementing New Providers
 

@@ -20,7 +20,17 @@
     "db:reset": "tsx src/scripts/db-init.ts --reset",
     "db:export": "tsx src/scripts/db-export.ts",
     "db:import": "tsx src/scripts/db-import.ts",
-    "db:health": "tsx src/scripts/db-health.ts"
+    "db:health": "tsx src/scripts/db-health.ts",
+    "db:migrate": "tsx src/scripts/db-migrate.ts migrate",
+    "db:migrate:status": "tsx src/scripts/db-migrate.ts status",
+    "db:migrate:rollback": "tsx src/scripts/db-migrate.ts rollback",
+    "db:migrate:fresh": "tsx src/scripts/db-migrate.ts fresh",
+    "db:migrate:reset": "tsx src/scripts/db-migrate.ts reset",
+    "db:make-migration": "tsx src/scripts/db-make-migration.ts",
+    "db:seed": "tsx src/scripts/db-seed.ts realistic",
+    "db:seed:minimal": "tsx src/scripts/db-seed.ts minimal",
+    "db:seed:stress": "tsx src/scripts/db-seed.ts stress",
+    "db:seed:clear": "tsx src/scripts/db-seed.ts clear"
   },
   "keywords": [
     "puzzle",

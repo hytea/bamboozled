@@ -2,7 +2,7 @@ import { Kysely, SqliteDialect } from 'kysely';
 import SQLite from 'better-sqlite3';
 import type { Database } from '../schema.js';
 import type { DatabaseProvider, DatabaseConfig } from './base.provider.js';
-import { up, down } from '../migrations.js';
+import { MigrationManager } from '../migration-manager.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -86,8 +86,8 @@ export class SQLiteProvider implements DatabaseProvider {
     }
 
     console.log('🔄 Running database migrations...');
-    await up(this.db);
-    console.log('✅ Migrations completed successfully');
+    const manager = new MigrationManager(this.db);
+    await manager.migrate();
   }
 
   async reset(): Promise<void> {
@@ -96,9 +96,8 @@ export class SQLiteProvider implements DatabaseProvider {
     }
 
     console.log('⚠️  Resetting database (all data will be lost)...');
-    await down(this.db);
-    await up(this.db);
-    console.log('✅ Database reset complete');
+    const manager = new MigrationManager(this.db);
+    await manager.fresh();
   }
 
   async healthCheck(): Promise<boolean> {
