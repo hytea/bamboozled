@@ -6,6 +6,7 @@ import { StatsService } from './stats.service.js';
 import { MoodService } from './mood.service.js';
 import { UserService } from './user.service.js';
 import { AchievementService } from './achievement.service.js';
+import { HintService } from './hint.service.js';
 import type { AIProvider, User } from '../types/index.js';
 import type { FastifyInstance } from 'fastify';
 import * as fs from 'fs';
@@ -18,6 +19,7 @@ export class SlackService {
   private moodService: MoodService;
   private userService: UserService;
   private achievementService: AchievementService;
+  private hintService: HintService;
   private aiProvider: AIProvider;
   private logger: FastifyInstance['log'];
 
@@ -41,6 +43,7 @@ export class SlackService {
     this.moodService = new MoodService();
     this.userService = new UserService();
     this.achievementService = new AchievementService();
+    this.hintService = new HintService(aiProvider);
     this.aiProvider = aiProvider;
     this.logger = logger;
 
@@ -104,6 +107,12 @@ export class SlackService {
     this.app.command('/allbadges', async ({ command, ack }) => {
       await ack();
       await this.handleAllBadgesCommand(command.channel_id, undefined);
+    });
+
+    // /hint - Get a hint for the current puzzle
+    this.app.command('/hint', async ({ command, ack }) => {
+      await ack();
+      await this.handleHintCommand(command.channel_id, undefined, command.user_id);
     });
   }
 
@@ -329,6 +338,10 @@ export class SlackService {
                 {
                   type: 'mrkdwn',
                   text: `*Badges:*\n🏆 ${achievementProgress.unlocked}/${achievementProgress.total}`
+                },
+                {
+                  type: 'mrkdwn',
+                  text: `*Hint Coins:*\n💰 ${stats.hint_coins}`
                 }
               ]
             }
@@ -431,6 +444,7 @@ export class SlackService {
     */alltime* - View all-time leaderboard
     */badges* or */achievements* - View your earned badges
     */allbadges* - View all available badges
+    */hint* - Get a hint (costs coins!)
     */generate* [theme] - Generate a new AI puzzle
     */mypuzzles* - View your generated puzzles
     */review* - View pending puzzles (admin)
@@ -751,6 +765,57 @@ export class SlackService {
             channel: channelId,
             ...(threadTs && { thread_ts: threadTs }),
             text: 'Sorry, I encountered an error fetching all badges.'
+          });
+        }
+      }
+
+      /**
+       * Handle /hint command - Request a hint for the current puzzle
+       */
+      private async handleHintCommand(channelId: string, threadTs: string | undefined, userId: string): Promise<void> {
+        try {
+          await this.ensureUser(userId);
+          const result = await this.hintService.requestHint(userId);
+
+          if (result.success) {
+            await this.app.client.chat.postMessage({
+              channel: channelId,
+              ...(threadTs && { thread_ts: threadTs }),
+              text: result.message
+            });
+          } else {
+            // Send error message
+            await this.app.client.chat.postMessage({
+              channel: channelId,
+              ...(threadTs && { thread_ts: threadTs }),
+              text: result.message
+            });
+
+            // If insufficient coins, show pricing info
+            if (result.error === 'INSUFFICIENT_COINS') {
+              const costs = this.hintService.getHintCosts();
+              const pricingText = `💰 *Hint Pricing:*\n${costs.map(c => `• Level ${c.level}: ${c.cost} coins (${c.description})`).join('\n')}\n\n` +
+                `*Earn coins by solving puzzles!*\n` +
+                `• Base reward: 2 coins\n` +
+                `• First guess solve: +3 bonus coins\n` +
+                `• 3 or fewer guesses: +1 coin\n` +
+                `• 5+ week streak: +1 coin\n` +
+                `• 10+ week streak: +2 coins\n` +
+                `• First place finish: +2 coins`;
+
+              await this.app.client.chat.postMessage({
+                channel: channelId,
+                ...(threadTs && { thread_ts: threadTs }),
+                text: pricingText
+              });
+            }
+          }
+        } catch (error) {
+          this.logger.error(`Error handling hint command: ${error}`);
+          await this.app.client.chat.postMessage({
+            channel: channelId,
+            ...(threadTs && { thread_ts: threadTs }),
+            text: 'Sorry, I encountered an error getting your hint.'
           });
         }
       }

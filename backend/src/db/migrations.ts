@@ -10,6 +10,7 @@ export async function up(db: Kysely<any>): Promise<void> {
     .addColumn('display_name', 'text', (col) => col.notNull())
     .addColumn('mood_tier', 'integer', (col) => col.notNull().defaultTo(0))
     .addColumn('best_streak', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('hint_coins', 'integer', (col) => col.notNull().defaultTo(5))
     .addColumn('created_at', 'text', (col) =>
       col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`)
     )
@@ -228,6 +229,37 @@ export async function up(db: Kysely<any>): Promise<void> {
     .createIndex('idx_generated_puzzles_generated_by')
     .on('generated_puzzles')
     .column('generated_by')
+    .execute();
+
+  // Hints table
+  await db.schema
+    .createTable('hints')
+    .addColumn('hint_id', 'text', (col) => col.primaryKey())
+    .addColumn('user_id', 'text', (col) =>
+      col.notNull().references('users.user_id').onDelete('cascade')
+    )
+    .addColumn('puzzle_id', 'text', (col) =>
+      col.notNull().references('puzzles.puzzle_id').onDelete('cascade')
+    )
+    .addColumn('hint_level', 'integer', (col) => col.notNull())
+    .addColumn('hint_text', 'text', (col) => col.notNull())
+    .addColumn('coins_spent', 'integer', (col) => col.notNull())
+    .addColumn('timestamp', 'text', (col) =>
+      col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`)
+    )
+    .execute();
+
+  // Indexes for hints
+  await db.schema
+    .createIndex('idx_hints_user_id')
+    .on('hints')
+    .column('user_id')
+    .execute();
+
+  await db.schema
+    .createIndex('idx_hints_puzzle_id')
+    .on('hints')
+    .column('puzzle_id')
     .execute();
 }
 
@@ -504,6 +536,7 @@ async function seedAchievements(db: Kysely<any>): Promise<void> {
 }
 
 export async function down(db: Kysely<any>): Promise<void> {
+  await db.schema.dropTable('hints').execute();
   await db.schema.dropTable('generated_puzzles').execute();
   await db.schema.dropTable('user_achievements').execute();
   await db.schema.dropTable('achievements').execute();

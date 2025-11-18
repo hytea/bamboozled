@@ -78,7 +78,8 @@ export class StatsService {
       best_streak: bestStreak,
       first_place_finishes: firstPlaceFinishes,
       mood_tier: user.mood_tier,
-      mood_tier_name: moodTierInfo.name
+      mood_tier_name: moodTierInfo.name,
+      hint_coins: user.hint_coins
     };
   }
 

@@ -7,6 +7,7 @@ export interface UsersTable {
   display_name: string;
   mood_tier: number;
   best_streak: number;
+  hint_coins: number;
   created_at: ColumnType<Date, string | undefined, never>;
   updated_at: ColumnType<Date, string | undefined, string>;
 }
@@ -128,6 +129,21 @@ export type GeneratedPuzzle = Selectable<GeneratedPuzzlesTable>;
 export type NewGeneratedPuzzle = Insertable<GeneratedPuzzlesTable>;
 export type GeneratedPuzzleUpdate = Updateable<GeneratedPuzzlesTable>;
 
+// Hints table
+export interface HintsTable {
+  hint_id: Generated<string>;
+  user_id: string;
+  puzzle_id: string;
+  hint_level: number; // 1, 2, or 3
+  hint_text: string;
+  coins_spent: number;
+  timestamp: ColumnType<Date, string | undefined, never>;
+}
+
+export type Hint = Selectable<HintsTable>;
+export type NewHint = Insertable<HintsTable>;
+export type HintUpdate = Updateable<HintsTable>;
+
 // Database interface
 export interface Database {
   users: UsersTable;
@@ -138,4 +154,5 @@ export interface Database {
   achievements: AchievementsTable;
   user_achievements: UserAchievementsTable;
   generated_puzzles: GeneratedPuzzlesTable;
+  hints: HintsTable;
 }

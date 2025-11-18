@@ -5,6 +5,7 @@ import { PuzzleService } from '../services/puzzle.service.js';
 import { StatsService } from '../services/stats.service.js';
 import { MoodService } from '../services/mood.service.js';
 import { GuessService } from '../services/guess.service.js';
+import { HintService } from '../services/hint.service.js';
 import type { AIProvider } from '../types/index.js';
 
 interface ChatMessage {
@@ -32,6 +33,7 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
   const statsService = new StatsService();
   const moodService = new MoodService();
   const guessService = new GuessService(aiProvider);
+  const hintService = new HintService(aiProvider);
 
   fastify.get('/ws', { websocket: true }, (socket, request) => {
     fastify.log.info({ remoteAddress: request.socket.remoteAddress }, 'WebSocket connection established');
@@ -71,7 +73,7 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
 
             const response = JSON.stringify({
               type: 'bot',
-              content: `Welcome, ${user.display_name}! Type your guess or use commands like /puzzle, /stats, /leaderboard, /botmood, /help`,
+              content: `Welcome, ${user.display_name}! Type your guess or use commands like /puzzle, /stats, /leaderboard, /botmood, /hint, /help`,
               timestamp: new Date().toISOString(),
               userId: user.user_id,
               metadata: { moodTier: user.mood_tier }
@@ -123,7 +125,8 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
             puzzleService,
             statsService,
             moodService,
-            guessService
+            guessService,
+            hintService
           });
         } else if (message.type === 'message') {
           if (!message.userId) {
@@ -180,6 +183,7 @@ async function handleCommand(
     statsService: StatsService;
     moodService: MoodService;
     guessService: GuessService;
+    hintService: HintService;
   }
 ) {
   const command = message.content.toLowerCase().trim();
@@ -222,7 +226,8 @@ async function handleCommand(
 - Current Streak: ${stats.current_streak} weeks
 - Best Streak: ${stats.best_streak} weeks
 - First Place Finishes: ${stats.first_place_finishes}
-- Mood Tier: ${stats.mood_tier} (${stats.mood_tier_name})`;
+- Mood Tier: ${stats.mood_tier} (${stats.mood_tier_name})
+- 💰 Hint Coins: ${stats.hint_coins}`;
 
     socket.send(JSON.stringify({
       type: 'bot',
@@ -300,6 +305,36 @@ Needed: ${progress.streaksNeeded} more streak weeks OR ${progress.solvesNeeded} 
       timestamp: new Date().toISOString(),
       metadata: { isCommand: true, moodTier: progress.currentTier.tier }
     } as ChatMessage));
+  } else if (command.startsWith('/hint')) {
+    const result = await services.hintService.requestHint(message.userId!);
+
+    socket.send(JSON.stringify({
+      type: 'bot',
+      content: result.message,
+      timestamp: new Date().toISOString(),
+      metadata: { isCommand: true }
+    } as ChatMessage));
+
+    if (!result.success && result.error === 'INSUFFICIENT_COINS') {
+      // Show hint costs
+      const costs = services.hintService.getHintCosts();
+      const costsContent = `💰 Hint Pricing:
+${costs.map(c => `Level ${c.level}: ${c.cost} coins (${c.description})`).join('\n')}
+
+Earn coins by solving puzzles! Bonuses for:
+- First guess solve: +3 extra coins
+- 3 or fewer guesses: +1 coin
+- 5+ week streak: +1 coin
+- 10+ week streak: +2 coins
+- First place finish: +2 coins`;
+
+      socket.send(JSON.stringify({
+        type: 'bot',
+        content: costsContent,
+        timestamp: new Date().toISOString(),
+        metadata: { isCommand: true }
+      } as ChatMessage));
+    }
   } else if (command === '/help') {
     const content = `📚 Available Commands:
 /puzzle - View current puzzle
@@ -307,6 +342,7 @@ Needed: ${progress.streaksNeeded} more streak weeks OR ${progress.solvesNeeded} 
 /alltime - View all-time leaderboard
 /stats - View your statistics
 /botmood - Check bot's attitude toward you
+/hint - Get a hint (costs coins!)
 /help - Show this help message
 
 Just type your answer to submit a guess!`;
