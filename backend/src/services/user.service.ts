@@ -102,5 +102,19 @@ export class UserService {
     const user = await this.userRepository.findByDisplayName(displayName);
     return !user;
   }
+
+  /**
+   * Get user by Slack user ID
+   */
+  async getUserBySlackId(slackUserId: string): Promise<User | undefined> {
+    return this.userRepository.findBySlackUserId(slackUserId);
+  }
+
+  /**
+   * Update user's hint coins
+   */
+  async updateHintCoins(userId: string, coins: number): Promise<User> {
+    return this.userRepository.update(userId, { hint_coins: coins });
+  }
 }
 

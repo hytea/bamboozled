@@ -414,6 +414,84 @@ export class AchievementService {
   }
 
   /**
+   * Check and award duel-specific achievements
+   */
+  async checkAndAwardDuelAchievements(userId: string): Promise<AchievementUnlock[]> {
+    const unlocked: AchievementUnlock[] = [];
+    const db = getDatabase();
+
+    // Get duel stats
+    const duels = await db
+      .selectFrom('duels')
+      .selectAll()
+      .where((eb) =>
+        eb.or([
+          eb('challenger_id', '=', userId),
+          eb('opponent_id', '=', userId)
+        ])
+      )
+      .where('status', '=', 'COMPLETED')
+      .orderBy('completed_at', 'desc')
+      .execute();
+
+    const totalDuels = duels.length;
+    const wins = duels.filter(d => d.winner_id === userId).length;
+
+    // Check duel win achievements
+    if (wins === 1) {
+      await this.unlockAchievement(userId, 'duel_initiate', unlocked);
+    }
+    if (wins === 5) {
+      await this.unlockAchievement(userId, 'duel_warrior', unlocked);
+    }
+    if (wins === 10) {
+      await this.unlockAchievement(userId, 'duel_champion', unlocked);
+    }
+    if (wins === 25) {
+      await this.unlockAchievement(userId, 'duel_legend', unlocked);
+    }
+
+    // Check consecutive wins
+    let consecutiveWins = 0;
+    for (const duel of duels) {
+      if (duel.winner_id === userId) {
+        consecutiveWins++;
+      } else {
+        break;
+      }
+    }
+
+    if (consecutiveWins >= 5) {
+      await this.unlockAchievement(userId, 'duel_undefeated', unlocked);
+    }
+
+    // Check win rate (75%+ with at least 10 duels)
+    if (totalDuels >= 10 && wins / totalDuels >= 0.75) {
+      await this.unlockAchievement(userId, 'duel_master', unlocked);
+    }
+
+    // Check for speed duel win (under 30 seconds)
+    // Get the most recent won duel
+    const recentWin = duels.find(d => d.winner_id === userId);
+    if (recentWin && recentWin.started_at) {
+      const startTime = new Date(recentWin.started_at).getTime();
+      let solveTime: number | null = null;
+
+      if (recentWin.challenger_id === userId && recentWin.challenger_solve_time) {
+        solveTime = new Date(recentWin.challenger_solve_time).getTime();
+      } else if (recentWin.opponent_id === userId && recentWin.opponent_solve_time) {
+        solveTime = new Date(recentWin.opponent_solve_time).getTime();
+      }
+
+      if (solveTime && (solveTime - startTime) < 30000) {
+        await this.unlockAchievement(userId, 'duel_speed', unlocked);
+      }
+    }
+
+    return unlocked;
+  }
+
+  /**
    * Format achievements for display
    */
   formatAchievementMessage(achievements: AchievementUnlock[]): string {

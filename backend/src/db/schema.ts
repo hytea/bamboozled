@@ -144,6 +144,26 @@ export type Hint = Selectable<HintsTable>;
 export type NewHint = Insertable<HintsTable>;
 export type HintUpdate = Updateable<HintsTable>;
 
+// Duels table
+export interface DuelsTable {
+  duel_id: Generated<string>;
+  challenger_id: string;
+  opponent_id: string;
+  puzzle_id: string;
+  status: 'PENDING' | 'ACTIVE' | 'COMPLETED' | 'DECLINED' | 'CANCELLED';
+  winner_id: string | null;
+  challenger_solve_time: ColumnType<Date, string | undefined, string> | null;
+  opponent_solve_time: ColumnType<Date, string | undefined, string> | null;
+  coins_wagered: number;
+  created_at: ColumnType<Date, string | undefined, never>;
+  started_at: ColumnType<Date, string | undefined, string> | null;
+  completed_at: ColumnType<Date, string | undefined, string> | null;
+}
+
+export type Duel = Selectable<DuelsTable>;
+export type NewDuel = Insertable<DuelsTable>;
+export type DuelUpdate = Updateable<DuelsTable>;
+
 // Database interface
 export interface Database {
   users: UsersTable;
@@ -155,4 +175,5 @@ export interface Database {
   user_achievements: UserAchievementsTable;
   generated_puzzles: GeneratedPuzzlesTable;
   hints: HintsTable;
+  duels: DuelsTable;
 }

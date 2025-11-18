@@ -261,6 +261,61 @@ export async function up(db: Kysely<any>): Promise<void> {
     .on('hints')
     .column('puzzle_id')
     .execute();
+
+  // Duels table
+  await db.schema
+    .createTable('duels')
+    .addColumn('duel_id', 'text', (col) => col.primaryKey())
+    .addColumn('challenger_id', 'text', (col) =>
+      col.notNull().references('users.user_id').onDelete('cascade')
+    )
+    .addColumn('opponent_id', 'text', (col) =>
+      col.notNull().references('users.user_id').onDelete('cascade')
+    )
+    .addColumn('puzzle_id', 'text', (col) =>
+      col.notNull().references('puzzles.puzzle_id').onDelete('cascade')
+    )
+    .addColumn('status', 'text', (col) => col.notNull().defaultTo('PENDING'))
+    .addColumn('winner_id', 'text', (col) =>
+      col.references('users.user_id').onDelete('set null')
+    )
+    .addColumn('challenger_solve_time', 'text')
+    .addColumn('opponent_solve_time', 'text')
+    .addColumn('coins_wagered', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('created_at', 'text', (col) =>
+      col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`)
+    )
+    .addColumn('started_at', 'text')
+    .addColumn('completed_at', 'text')
+    .execute();
+
+  // Indexes for duels
+  await db.schema
+    .createIndex('idx_duels_challenger_id')
+    .on('duels')
+    .column('challenger_id')
+    .execute();
+
+  await db.schema
+    .createIndex('idx_duels_opponent_id')
+    .on('duels')
+    .column('opponent_id')
+    .execute();
+
+  await db.schema
+    .createIndex('idx_duels_status')
+    .on('duels')
+    .column('status')
+    .execute();
+
+  await db.schema
+    .createIndex('idx_duels_puzzle_id')
+    .on('duels')
+    .column('puzzle_id')
+    .execute();
+
+  // Seed duel-specific achievements
+  await seedDuelAchievements(db);
 }
 
 /**
@@ -535,7 +590,109 @@ async function seedAchievements(db: Kysely<any>): Promise<void> {
   console.log(`✅ Seeded ${achievements.length} achievements`);
 }
 
+/**
+ * Seed duel-specific achievements into the database
+ */
+async function seedDuelAchievements(db: Kysely<any>): Promise<void> {
+  const achievements = [
+    {
+      achievement_id: 'duel_initiate',
+      achievement_key: 'DUEL_INITIATE',
+      name: 'Duel Initiate',
+      description: 'Win your first duel',
+      emoji: '⚔️',
+      category: 'special',
+      tier: 'bronze',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'duel_warrior',
+      achievement_key: 'DUEL_WARRIOR',
+      name: 'Duel Warrior',
+      description: 'Win 5 duels',
+      emoji: '🛡️',
+      category: 'special',
+      tier: 'silver',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'duel_champion',
+      achievement_key: 'DUEL_CHAMPION',
+      name: 'Duel Champion',
+      description: 'Win 10 duels',
+      emoji: '👑',
+      category: 'special',
+      tier: 'gold',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'duel_legend',
+      achievement_key: 'DUEL_LEGEND',
+      name: 'Duel Legend',
+      description: 'Win 25 duels',
+      emoji: '🏆',
+      category: 'special',
+      tier: 'legendary',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'duel_undefeated',
+      achievement_key: 'UNDEFEATED',
+      name: 'Undefeated',
+      description: 'Win 5 duels in a row',
+      emoji: '💪',
+      category: 'special',
+      tier: 'platinum',
+      is_secret: 0
+    },
+    {
+      achievement_id: 'duel_comeback',
+      achievement_key: 'COMEBACK_DUELIST',
+      name: 'Comeback Duelist',
+      description: 'Win a duel after your opponent solved first but incorrectly',
+      emoji: '🔥',
+      category: 'special',
+      tier: 'silver',
+      is_secret: 1
+    },
+    {
+      achievement_id: 'duel_speed',
+      achievement_key: 'SPEED_DUELIST',
+      name: 'Lightning Duelist',
+      description: 'Win a duel in under 30 seconds',
+      emoji: '⚡',
+      category: 'special',
+      tier: 'gold',
+      is_secret: 1
+    },
+    {
+      achievement_id: 'duel_master',
+      achievement_key: 'DUEL_MASTER',
+      name: 'Duel Master',
+      description: 'Maintain a 75% or higher win rate with at least 10 duels',
+      emoji: '🎯',
+      category: 'special',
+      tier: 'platinum',
+      is_secret: 0
+    }
+  ];
+
+  // Insert achievements with timestamps
+  for (const achievement of achievements) {
+    await db
+      .insertInto('achievements')
+      .values({
+        ...achievement,
+        created_at: new Date().toISOString()
+      })
+      .execute();
+  }
+
+  console.log(`✅ Seeded ${achievements.length} duel achievements`);
+}
+
 export async function down(db: Kysely<any>): Promise<void> {
+  await db.schema.dropTable('duels').execute();
   await db.schema.dropTable('hints').execute();
   await db.schema.dropTable('generated_puzzles').execute();
   await db.schema.dropTable('user_achievements').execute();

@@ -7,6 +7,7 @@ import { MoodService } from './mood.service.js';
 import { UserService } from './user.service.js';
 import { AchievementService } from './achievement.service.js';
 import { HintService } from './hint.service.js';
+import { DuelService } from './duel.service.js';
 import type { AIProvider, User } from '../types/index.js';
 import type { FastifyInstance } from 'fastify';
 import * as fs from 'fs';
@@ -20,6 +21,7 @@ export class SlackService {
   private userService: UserService;
   private achievementService: AchievementService;
   private hintService: HintService;
+  private duelService: DuelService;
   private aiProvider: AIProvider;
   private logger: FastifyInstance['log'];
 
@@ -44,6 +46,7 @@ export class SlackService {
     this.userService = new UserService();
     this.achievementService = new AchievementService();
     this.hintService = new HintService(aiProvider);
+    this.duelService = new DuelService(aiProvider);
     this.aiProvider = aiProvider;
     this.logger = logger;
 
@@ -113,6 +116,18 @@ export class SlackService {
     this.app.command('/hint', async ({ command, ack }) => {
       await ack();
       await this.handleHintCommand(command.channel_id, undefined, command.user_id);
+    });
+
+    // /challenge - Challenge another user to a puzzle duel
+    this.app.command('/challenge', async ({ command, ack }) => {
+      await ack();
+      await this.handleChallengeCommand(command.channel_id, undefined, command.user_id, command.text);
+    });
+
+    // /duels - View your duel statistics and active duels
+    this.app.command('/duels', async ({ command, ack }) => {
+      await ack();
+      await this.handleDuelsCommand(command.channel_id, undefined, command.user_id);
     });
   }
 
@@ -445,16 +460,25 @@ export class SlackService {
     */badges* or */achievements* - View your earned badges
     */allbadges* - View all available badges
     */hint* - Get a hint (costs coins!)
+    */botmood* - Check the bot's mood toward you
+
+    *⚔️ Duel Commands (NEW!)*
+    */challenge* @user - Challenge someone to a puzzle duel!
+    */duels* - View your duel stats and history
+
+    *🤖 AI Puzzle Generation*
     */generate* [theme] - Generate a new AI puzzle
     */mypuzzles* - View your generated puzzles
     */review* - View pending puzzles (admin)
     */approve* <id> - Approve a puzzle (admin)
     */reject* <id> <reason> - Reject a puzzle (admin)
-    */botmood* - Check the bot's mood toward you
+
+    *🔧 Other*
     */nextweek* - Rotate to next puzzle (testing)
     */help* - Show this help message
 
-    💡 *To submit an answer, send me a direct message with your guess!*`;
+    💡 *To submit an answer, send me a direct message with your guess!*
+    ⚔️ *Challenge your coworkers to duels for bragging rights!*`;
 
         await this.app.client.chat.postMessage({
           channel: channelId,
@@ -1051,6 +1075,12 @@ export class SlackService {
             intent = '/badges';
           } else if (lowerText.match(/^(all\s*badges|all\s*achievements)/)) {
             intent = '/allbadges';
+          } else if (lowerText.match(/^(accept|yes|i\s*accept|let's\s*go)/)) {
+            intent = 'accept_duel';
+          } else if (lowerText.match(/^(decline|no|reject|pass)/)) {
+            intent = 'decline_duel';
+          } else if (lowerText.match(/^(duel|duels|my\s*duels)/)) {
+            intent = '/duels';
           } else if (lowerText.match(/^(hi|hello|hey|good\s*(morning|afternoon|evening))/)) {
             intent = 'none';
           } else {
@@ -1064,7 +1094,8 @@ export class SlackService {
               '/botmood',
               '/badges',
               '/allbadges',
-              '/nextweek'
+              '/nextweek',
+              '/duels'
             ];
             intent = await this.aiProvider.determineIntent(text, availableCommands);
             this.logger.info(`AI determined intent: "${intent}" for message: "${text}"`);
@@ -1099,9 +1130,151 @@ export class SlackService {
             case '/allbadges':
               await this.handleAllBadgesCommand(channelId, threadTs);
               break;
+            case '/duels':
+              await this.handleDuelsCommand(channelId, threadTs, user.user_id);
+              break;
+            case 'accept_duel':
+              // Check for pending duel
+              const pendingDuel = await this.duelService.getUserDuels(user.user_id, 100).then(duels =>
+                duels.find(d => d.opponent_id === user.user_id && d.status === 'PENDING')
+              );
+
+              if (!pendingDuel) {
+                await this.app.client.chat.postMessage({
+                  channel: channelId,
+                  thread_ts: threadTs,
+                  text: "You don't have any pending duel challenges."
+                });
+                break;
+              }
+
+              const acceptResult = await this.duelService.acceptChallenge(pendingDuel.duel_id, user.user_id);
+
+              if (acceptResult.success && acceptResult.puzzle) {
+                await this.app.client.chat.postMessage({
+                  channel: channelId,
+                  thread_ts: threadTs,
+                  text: `⚔️ *Challenge Accepted!*\n\nThe duel has begun! First to solve wins.\n\nSend me your answer as a direct message.`
+                });
+
+                // Show the puzzle
+                await this.app.client.files.uploadV2({
+                  channel_id: channelId,
+                  thread_ts: threadTs,
+                  file: await fs.promises.readFile(acceptResult.puzzle.image_path),
+                  filename: 'puzzle.png',
+                  title: '🧩 Puzzle Duel'
+                });
+
+                // Notify challenger that duel started
+                const challenger = await this.userService.getUserById(pendingDuel.challenger_id);
+                if (challenger && challenger.slack_user_id) {
+                  try {
+                    const challengerDmChannel = await this.app.client.conversations.open({
+                      users: challenger.slack_user_id
+                    });
+
+                    await this.app.client.chat.postMessage({
+                      channel: challengerDmChannel.channel!.id!,
+                      text: `⚔️ *${user.display_name} accepted your challenge!*\n\nThe duel has begun! Send me your answer to solve the puzzle.`
+                    });
+
+                    // Send puzzle to challenger too
+                    await this.app.client.files.uploadV2({
+                      channel_id: challengerDmChannel.channel!.id!,
+                      file: await fs.promises.readFile(acceptResult.puzzle.image_path),
+                      filename: 'puzzle.png',
+                      title: '🧩 Puzzle Duel'
+                    });
+                  } catch (error) {
+                    this.logger.warn(`Could not DM challenger: ${error}`);
+                  }
+                }
+              } else {
+                await this.app.client.chat.postMessage({
+                  channel: channelId,
+                  thread_ts: threadTs,
+                  text: `❌ ${acceptResult.message}`
+                });
+              }
+              break;
+
+            case 'decline_duel':
+              // Check for pending duel
+              const declineDuel = await this.duelService.getUserDuels(user.user_id, 100).then(duels =>
+                duels.find(d => d.opponent_id === user.user_id && d.status === 'PENDING')
+              );
+
+              if (!declineDuel) {
+                await this.app.client.chat.postMessage({
+                  channel: channelId,
+                  thread_ts: threadTs,
+                  text: "You don't have any pending duel challenges."
+                });
+                break;
+              }
+
+              const declineResult = await this.duelService.declineChallenge(declineDuel.duel_id, user.user_id);
+
+              await this.app.client.chat.postMessage({
+                channel: channelId,
+                thread_ts: threadTs,
+                text: declineResult.success ? '✅ Challenge declined.' : `❌ ${declineResult.message}`
+              });
+
+              // Notify challenger
+              const declinedChallenger = await this.userService.getUserById(declineDuel.challenger_id);
+              if (declineResult.success && declinedChallenger && declinedChallenger.slack_user_id) {
+                try {
+                  const challengerDmChannel = await this.app.client.conversations.open({
+                    users: declinedChallenger.slack_user_id
+                  });
+
+                  await this.app.client.chat.postMessage({
+                    channel: challengerDmChannel.channel!.id!,
+                    text: `${user.display_name} declined your duel challenge.`
+                  });
+                } catch (error) {
+                  this.logger.warn(`Could not DM challenger: ${error}`);
+                }
+              }
+              break;
+
             case 'guess':
             default:
-              // Treat unknown intents as guesses (this is primarily a guessing game)
+              // Check if user has an active duel first
+              const duelResult = await this.duelService.submitDuelGuess(user.user_id, text);
+
+              if (duelResult) {
+                // This was a duel guess
+                await this.app.client.chat.postMessage({
+                  channel: channelId,
+                  thread_ts: threadTs,
+                  text: duelResult.message
+                });
+
+                if (duelResult.duelCompleted && duelResult.winner) {
+                  await this.app.client.chat.postMessage({
+                    channel: channelId,
+                    thread_ts: threadTs,
+                    text: `⚔️ *DUEL COMPLETE!*\n\n🏆 Winner: ${duelResult.winner}!\n\nGreat match!`
+                  });
+
+                  // Show achievements if any were unlocked
+                  if (duelResult.achievements && duelResult.achievements.length > 0) {
+                    const achievementMessage = this.achievementService.formatAchievementMessage(duelResult.achievements);
+                    await this.app.client.chat.postMessage({
+                      channel: channelId,
+                      thread_ts: threadTs,
+                      text: achievementMessage
+                    });
+                  }
+                }
+
+                break;
+              }
+
+              // Not a duel guess, treat as regular puzzle guess
               const result = await this.guessService.submitGuess(user.user_id, text);
 
               // Send response message
@@ -1173,6 +1346,173 @@ export class SlackService {
           });
         }
       }
+
+  /**
+   * Handle /challenge command - Challenge another user to a puzzle duel
+   */
+  private async handleChallengeCommand(
+    channelId: string,
+    threadTs: string | undefined,
+    userId: string,
+    commandText: string
+  ): Promise<void> {
+    try {
+      await this.ensureUser(userId);
+
+      // Parse command text to extract opponent
+      // Expected format: /challenge @username [coins]
+      const parts = commandText.trim().split(/\s+/);
+
+      if (parts.length === 0 || !parts[0].startsWith('<@')) {
+        await this.app.client.chat.postMessage({
+          channel: channelId,
+          ...(threadTs && { thread_ts: threadTs }),
+          text: '⚔️ *How to Challenge:*\n' +
+            'Use `/challenge @username` to challenge someone to a puzzle duel!\n\n' +
+            '*Example:* `/challenge @john`\n\n' +
+            'The first person to solve the puzzle wins!'
+        });
+        return;
+      }
+
+      // Extract opponent Slack user ID from mention format <@U12345|username> or <@U12345>
+      const opponentMention = parts[0];
+      const opponentSlackId = opponentMention.match(/<@([^|>]+)/)?.[1];
+
+      if (!opponentSlackId) {
+        await this.app.client.chat.postMessage({
+          channel: channelId,
+          ...(threadTs && { thread_ts: threadTs }),
+          text: "❌ Invalid user mention. Please use `@username` to mention someone."
+        });
+        return;
+      }
+
+      // Optional: Parse coins wagered (future feature)
+      const coinsWagered = 0; // parts.length > 1 ? parseInt(parts[1]) : 0;
+
+      // Create the challenge
+      const result = await this.duelService.createChallenge(userId, opponentSlackId, coinsWagered);
+
+      if (!result.success) {
+        await this.app.client.chat.postMessage({
+          channel: channelId,
+          ...(threadTs && { thread_ts: threadTs }),
+          text: `❌ ${result.message}`
+        });
+        return;
+      }
+
+      // Send challenge notification
+      const challenger = await this.userService.getUserById(userId);
+      const challengeMessage = `⚔️ *PUZZLE DUEL CHALLENGE!*\n\n` +
+        `<@${userId}> has challenged <@${opponentSlackId}> to a puzzle duel!\n\n` +
+        `🧩 *The Challenge:* Be the first to solve the puzzle!\n` +
+        `🏆 *Winner takes all!*\n\n` +
+        `<@${opponentSlackId}>, DM me with:\n` +
+        `• "accept" to accept the challenge\n` +
+        `• "decline" to decline\n\n` +
+        `_The puzzle will be revealed once accepted._`;
+
+      await this.app.client.chat.postMessage({
+        channel: channelId,
+        ...(threadTs && { thread_ts: threadTs }),
+        text: challengeMessage
+      });
+
+      // Send DM to opponent with challenge details
+      const opponentUser = await this.userService.getUserBySlackId(opponentSlackId);
+      if (opponentUser) {
+        try {
+          const dmChannel = await this.app.client.conversations.open({
+            users: opponentSlackId
+          });
+
+          await this.app.client.chat.postMessage({
+            channel: dmChannel.channel!.id!,
+            text: `⚔️ *You've been challenged to a duel!*\n\n` +
+              `${challenger?.display_name || 'Someone'} has challenged you to a puzzle solving competition!\n\n` +
+              `Reply with:\n` +
+              `• "accept" to accept the challenge\n` +
+              `• "decline" to decline`
+          });
+        } catch (error) {
+          this.logger.warn(`Could not DM opponent: ${error}`);
+        }
+      }
+
+    } catch (error) {
+      this.logger.error(`Error handling challenge command: ${error}`);
+      await this.app.client.chat.postMessage({
+        channel: channelId,
+        ...(threadTs && { thread_ts: threadTs }),
+        text: '❌ Sorry, I encountered an error creating the challenge.'
+      });
+    }
+  }
+
+  /**
+   * Handle /duels command - View duel statistics
+   */
+  private async handleDuelsCommand(
+    channelId: string,
+    threadTs: string | undefined,
+    userId: string
+  ): Promise<void> {
+    try {
+      await this.ensureUser(userId);
+
+      const stats = await this.duelService.getUserDuelStats(userId);
+      const recentDuels = await this.duelService.getUserDuels(userId, 5);
+
+      const statsText = `📊 *Your Duel Statistics*\n\n` +
+        `⚔️ Total Duels: ${stats.total_duels}\n` +
+        `🏆 Wins: ${stats.wins}\n` +
+        `💔 Losses: ${stats.losses}\n` +
+        `📈 Win Rate: ${stats.win_rate}%\n` +
+        `🔥 Consecutive Wins: ${stats.consecutive_wins}\n` +
+        `⏳ Active Duels: ${stats.active}\n` +
+        `📬 Pending Challenges: ${stats.pending}`;
+
+      let recentText = '';
+      if (recentDuels.length > 0) {
+        recentText = '\n\n*Recent Duels:*\n';
+        for (const duel of recentDuels) {
+          const isChallenger = duel.challenger_id === userId;
+          const opponentId = isChallenger ? duel.opponent_id : duel.challenger_id;
+          const opponent = await this.userService.getUserById(opponentId);
+
+          const statusEmoji = duel.status === 'COMPLETED'
+            ? (duel.winner_id === userId ? '✅' : '❌')
+            : duel.status === 'ACTIVE'
+              ? '⏳'
+              : duel.status === 'PENDING'
+                ? '📬'
+                : '🚫';
+
+          const statusText = duel.status === 'COMPLETED'
+            ? (duel.winner_id === userId ? 'Won' : 'Lost')
+            : duel.status;
+
+          recentText += `${statusEmoji} vs ${opponent?.display_name || 'Unknown'} - ${statusText}\n`;
+        }
+      }
+
+      await this.app.client.chat.postMessage({
+        channel: channelId,
+        ...(threadTs && { thread_ts: threadTs }),
+        text: statsText + recentText + '\n\n_Use `/challenge @username` to start a new duel!_'
+      });
+
+    } catch (error) {
+      this.logger.error(`Error handling duels command: ${error}`);
+      await this.app.client.chat.postMessage({
+        channel: channelId,
+        ...(threadTs && { thread_ts: threadTs }),
+        text: '❌ Sorry, I encountered an error fetching your duel statistics.'
+      });
+    }
+  }
 
   /**
    * Start the Slack bot
