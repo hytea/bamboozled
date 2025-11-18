@@ -27,6 +27,105 @@ interface IncomingMessage {
   userName?: string;
 }
 
+interface InitResult {
+  success: boolean;
+  user?: any;
+  error?: string;
+  errorType?: 'DISPLAY_NAME_TAKEN' | 'USER_ID_MISMATCH' | 'INVALID_INPUT';
+}
+
+/**
+ * Initialize user with proper validation and session recovery
+ */
+async function initializeUser(
+  message: IncomingMessage,
+  userService: UserService,
+  fastify: FastifyInstance
+): Promise<InitResult> {
+  const { userId, userName } = message;
+
+  // Validate input
+  if (!userName || userName.trim().length === 0) {
+    return {
+      success: false,
+      error: 'Please enter a username',
+      errorType: 'INVALID_INPUT'
+    };
+  }
+
+  if (userName.trim().length > 50) {
+    return {
+      success: false,
+      error: 'Username must be 50 characters or less',
+      errorType: 'INVALID_INPUT'
+    };
+  }
+
+  const cleanUserName = userName.trim();
+
+  // Case 1: Frontend provided a userId (session recovery)
+  if (userId && userId.trim().length > 0) {
+    const existingUser = await userService.getUserById(userId);
+
+    if (existingUser) {
+      // Session recovery: user exists with this ID
+      fastify.log.info({ userId, existingDisplayName: existingUser.display_name, requestedDisplayName: cleanUserName }, 'Session recovery for existing user');
+
+      // Check if they're trying to change their display name
+      if (existingUser.display_name !== cleanUserName) {
+        // Check if new display name is available
+        const isAvailable = await userService.isDisplayNameAvailable(cleanUserName);
+        if (!isAvailable) {
+          return {
+            success: false,
+            error: `The username "${cleanUserName}" is already taken. Your username is "${existingUser.display_name}".`,
+            errorType: 'DISPLAY_NAME_TAKEN'
+          };
+        }
+
+        // Update display name
+        const updatedUser = await userService.updateDisplayName(userId, cleanUserName);
+        fastify.log.info({ userId, oldName: existingUser.display_name, newName: cleanUserName }, 'Updated display name for existing user');
+        return { success: true, user: updatedUser };
+      }
+
+      // Same display name, just return existing user
+      return { success: true, user: existingUser };
+    } else {
+      // User ID doesn't exist yet, create new user with provided ID
+      fastify.log.info({ userId, userName: cleanUserName }, 'Creating new user with provided userId');
+
+      // Check if display name is available
+      const isAvailable = await userService.isDisplayNameAvailable(cleanUserName);
+      if (!isAvailable) {
+        return {
+          success: false,
+          error: `The username "${cleanUserName}" is already taken. Please choose a different username.`,
+          errorType: 'DISPLAY_NAME_TAKEN'
+        };
+      }
+
+      // Create user with the frontend-provided userId
+      const newUser = await userService.createUserWithId(userId, cleanUserName);
+      return { success: true, user: newUser };
+    }
+  }
+
+  // Case 2: No userId provided, try to find by display name (legacy flow)
+  const existingUserByName = await userService.getUserByDisplayName(cleanUserName);
+
+  if (existingUserByName) {
+    // Display name exists, return the existing user
+    fastify.log.info({ userId: existingUserByName.user_id, displayName: cleanUserName }, 'Found existing user by display name');
+    return { success: true, user: existingUserByName };
+  }
+
+  // Case 3: Create new user (no userId provided, display name doesn't exist)
+  fastify.log.info({ userName: cleanUserName }, 'Creating new user without userId (legacy)');
+  const newUser = await userService.getOrCreateUserByDisplayName(cleanUserName);
+  return { success: true, user: newUser };
+}
+
 export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: AIProvider) {
   const userService = new UserService();
   const puzzleService = new PuzzleService();
@@ -63,13 +162,26 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
         }
 
         if (message.type === 'init') {
-          fastify.log.info({ userName: message.userName }, 'Processing init message for user');
+          fastify.log.info({ userName: message.userName, userId: message.userId }, 'Processing init message for user');
 
           try {
-            // Initialize user
-            const user = await userService.getOrCreateUserByDisplayName(message.userName || 'Player');
-            fastify.log.info({ displayName: user.display_name }, 'User created/found');
-            fastify.log.info({ state: socket.readyState }, 'Socket state after user creation');
+            // Initialize user with proper validation
+            const initResult = await initializeUser(message, userService, fastify);
+
+            if (!initResult.success) {
+              // Send error message to client
+              socket.send(JSON.stringify({
+                type: 'error',
+                content: initResult.error || 'Failed to initialize user',
+                timestamp: new Date().toISOString(),
+                metadata: { errorType: initResult.errorType }
+              }));
+              fastify.log.error({ error: initResult.error, errorType: initResult.errorType }, 'User initialization failed');
+              return;
+            }
+
+            const user = initResult.user;
+            fastify.log.info({ displayName: user.display_name, userId: user.user_id }, 'User initialized successfully');
 
             const response = JSON.stringify({
               type: 'bot',
@@ -80,7 +192,6 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
             } as ChatMessage);
 
             fastify.log.info({ state: socket.readyState }, 'Sending welcome message');
-            fastify.log.info({ size: Buffer.byteLength(response) }, 'Response size in bytes');
 
             if (socket.readyState === 1) { // 1 = OPEN
               socket.send(response);
@@ -105,7 +216,11 @@ export function registerWebSocketHandler(fastify: FastifyInstance, aiProvider: A
             }
           } catch (initError) {
             fastify.log.error({ error: initError }, 'Error during init processing');
-            throw initError;
+            socket.send(JSON.stringify({
+              type: 'error',
+              content: 'An unexpected error occurred. Please try again.',
+              timestamp: new Date().toISOString()
+            }));
           }
 
           return;

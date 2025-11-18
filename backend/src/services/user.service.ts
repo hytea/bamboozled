@@ -102,5 +102,25 @@ export class UserService {
     const user = await this.userRepository.findByDisplayName(displayName);
     return !user;
   }
+
+  /**
+   * Get user by display name (non-creating version)
+   */
+  async getUserByDisplayName(displayName: string): Promise<User | undefined> {
+    return this.userRepository.findByDisplayName(displayName);
+  }
+
+  /**
+   * Create user with a specific user ID (from frontend)
+   */
+  async createUserWithId(userId: string, displayName: string): Promise<User> {
+    return this.userRepository.create({
+      user_id: userId,
+      slack_user_id: null,
+      display_name: displayName,
+      mood_tier: 0,
+      best_streak: 0
+    });
+  }
 }
 

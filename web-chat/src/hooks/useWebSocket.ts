@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 export interface ChatMessage {
-  type: 'user' | 'bot';
+  type: 'user' | 'bot' | 'error';
   content: string;
   timestamp: string;
   userId?: string;
@@ -10,6 +10,7 @@ export interface ChatMessage {
     gifUrl?: string;
     isCommand?: boolean;
     moodTier?: number;
+    errorType?: 'DISPLAY_NAME_TAKEN' | 'USER_ID_MISMATCH' | 'INVALID_INPUT';
   };
 }
 
@@ -45,10 +46,11 @@ export function useWebSocket(url: string, userId: string, userName: string, onUs
       console.log('WebSocket connected');
       setIsConnected(true);
 
-      // Send init message (server will create/find user by userName and send back userId)
+      // Send init message with both userId and userName for proper session management
       ws.send(
         JSON.stringify({
           type: 'init',
+          userId: userIdRef.current,
           userName: userNameRef.current
         })
       );
