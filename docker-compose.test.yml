@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  # Backend test service
+  backend-test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.test
+    container_name: bamboozled-backend-test
+    environment:
+      - NODE_ENV=test
+      - AI_PROVIDER=mock
+      - DATABASE_PATH=:memory:
+      - PUZZLE_DATA_PATH=/app/puzzles/puzzle-data.json
+    volumes:
+      - ./backend/coverage:/app/coverage
+      - ./puzzles:/app/puzzles:ro
+    networks:
+      - test-network
+    command: npm run test:coverage
+
+  # Frontend test service
+  frontend-test:
+    build:
+      context: ./web-chat
+      dockerfile: Dockerfile.test
+    container_name: bamboozled-frontend-test
+    environment:
+      - NODE_ENV=test
+    volumes:
+      - ./web-chat/coverage:/app/coverage
+    networks:
+      - test-network
+    command: npm run test:coverage
+
+  # E2E test service (Playwright)
+  e2e-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    container_name: bamboozled-e2e-test
+    environment:
+      - NODE_ENV=test
+      - BACKEND_URL=http://backend:3001
+      - FRONTEND_URL=http://frontend
+      - AI_PROVIDER=mock
+      - DATABASE_PATH=:memory:
+    volumes:
+      - ./playwright-report:/app/playwright-report
+      - ./test-results:/app/test-results
+      - ./puzzles:/app/puzzles:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      - test-network
+    command: npx playwright test
+
+  # Backend service for E2E tests
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bamboozled-backend-e2e
+    ports:
+      - "3001:3001"
+    environment:
+      - AI_PROVIDER=mock
+      - PORT=3001
+      - NODE_ENV=test
+      - DATABASE_PATH=/tmp/bamboozled-test.db
+      - PUZZLE_DATA_PATH=/app/puzzles/puzzle-data.json
+      - PUZZLE_IMAGES_PATH=/app/puzzles/images
+      - ENABLE_WEB_CHAT=true
+      - ENABLE_SLACK=false
+    volumes:
+      - ./puzzles:/app/puzzles:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - test-network
+
+  # Frontend service for E2E tests
+  frontend:
+    build:
+      context: ./web-chat
+      dockerfile: Dockerfile
+    container_name: bamboozled-frontend-e2e
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge

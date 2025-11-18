@@ -1,0 +1,23 @@
+FROM mcr.microsoft.com/playwright:v1.56.1-noble
+
+WORKDIR /app
+
+# Copy root package files for Playwright
+COPY package*.json ./
+
+# Install Playwright and dependencies
+RUN npm ci
+
+# Copy Playwright configuration and tests
+COPY playwright.config.ts ./
+COPY playwright.config.docker.ts ./
+COPY tests ./tests
+
+# Create output directories
+RUN mkdir -p playwright-report test-results
+
+# Use Docker-specific config
+ENV PLAYWRIGHT_CONFIG=playwright.config.docker.ts
+
+# Default command runs Playwright tests
+CMD ["npx", "playwright", "test", "--config=playwright.config.docker.ts"]

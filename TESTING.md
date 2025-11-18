@@ -221,28 +221,117 @@ describe('YourComponent', () => {
 });
 ```
 
+## Docker-based Testing
+
+For repeatable, isolated testing in containers, use the Docker test setup:
+
+### Quick Start
+
+```bash
+# Run all tests (unit + E2E)
+./test-runner.sh all
+
+# Run only unit tests (backend + frontend)
+./test-runner.sh unit
+
+# Run only backend tests
+./test-runner.sh backend
+
+# Run only frontend tests
+./test-runner.sh frontend
+
+# Run only E2E tests
+./test-runner.sh e2e
+
+# Run tests with coverage reports
+./test-runner.sh coverage
+
+# Clean up test containers
+./test-runner.sh clean
+```
+
+### Manual Docker Commands
+
+#### Backend Tests
+
+```bash
+# Build and run backend tests
+docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit backend-test
+
+# Run with coverage
+docker-compose -f docker-compose.test.yml run --rm backend-test npm run test:coverage
+```
+
+#### Frontend Tests
+
+```bash
+# Build and run frontend tests
+docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit frontend-test
+
+# Run with coverage
+docker-compose -f docker-compose.test.yml run --rm frontend-test npm run test:coverage
+```
+
+#### E2E Tests
+
+```bash
+# Start backend and frontend services
+docker-compose -f docker-compose.test.yml up -d backend frontend
+
+# Run E2E tests
+docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit e2e-test
+
+# Clean up
+docker-compose -f docker-compose.test.yml down -v
+```
+
+### Docker Test Configuration
+
+The Docker test setup includes:
+
+1. **backend/Dockerfile.test** - Isolated backend test environment
+2. **web-chat/Dockerfile.test** - Isolated frontend test environment
+3. **Dockerfile.e2e** - Playwright E2E test environment
+4. **docker-compose.test.yml** - Orchestrates all test services
+5. **playwright.config.docker.ts** - Docker-specific Playwright configuration
+
+### Benefits of Docker Testing
+
+- **Reproducibility**: Tests run in identical environments across all machines
+- **Isolation**: Tests don't interfere with your local development environment
+- **Consistency**: Same results in local development, CI/CD, and production
+- **Clean State**: Each test run starts with a fresh container
+- **No Dependencies**: No need to install Node.js or dependencies locally
+
 ## Continuous Integration
 
-To integrate with CI/CD:
+The project includes a GitHub Actions workflow that automatically runs all tests on push and pull requests.
 
-1. Add test runs to your CI pipeline
-2. Enforce coverage thresholds
-3. Run tests on pull requests
-4. Generate and archive coverage reports
+### Workflow Overview
 
-Example GitHub Actions workflow:
+The CI pipeline runs three parallel jobs:
 
-```yaml
-name: Tests
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v2
-      - run: cd backend && npm install && npm test
-      - run: cd web-chat && npm install && npm test
+1. **Backend Tests** - Runs backend unit tests with coverage
+2. **Frontend Tests** - Runs frontend unit tests with coverage
+3. **E2E Tests** - Runs Playwright E2E tests against running services
+
+### Viewing Test Results
+
+- Test results are uploaded as artifacts
+- Coverage reports are available for download
+- PR comments show coverage percentages
+- Playwright HTML reports are available for failed E2E tests
+
+### Local CI Testing
+
+To simulate the CI environment locally:
+
+```bash
+# Use the test runner script (recommended)
+./test-runner.sh all
+
+# Or use docker-compose directly
+docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit backend-test frontend-test
 ```
 
 ## Coverage Goals
@@ -263,12 +352,16 @@ jobs:
 
 ## Future Improvements
 
-- [ ] Add E2E tests using Playwright or Cypress
+- [x] Add E2E tests using Playwright (COMPLETED)
+- [x] Add Docker-based test infrastructure for repeatable tests (COMPLETED)
+- [x] Set up CI/CD with GitHub Actions (COMPLETED)
 - [ ] Increase test coverage to 90%+
 - [ ] Add performance benchmarks
 - [ ] Add visual regression tests for UI components
 - [ ] Add mutation testing to verify test quality
 - [ ] Set up automated test reporting dashboard
+- [ ] Add contract testing between backend and frontend
+- [ ] Add load testing for WebSocket connections
 
 ## Resources
 
